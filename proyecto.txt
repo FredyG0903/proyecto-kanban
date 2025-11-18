@@ -1,0 +1,107 @@
+1) Descripción General
+Construirán una aplicación tipo Trello para gestión académica: tableros de cursos, listas de fases (Por hacer/En curso/Hecho), tarjetas con tareas/pendientes, comentarios, etiquetas y fechas límite.
+•	Frontend: React + TypeScript (Vite), Router, estado (Zustand o Redux), UI con Tailwind o Material UI.
+•	Backend: Django 5 + Django REST Framework (DRF), JWT (simplejwt), Postgres, CORS, documentación OpenAPI (drf-spectacular).
+•	Integración: consumo de la API desde React con Axios/fetch; manejo de auth, errores y estados de carga.
+•	Exoneracion de parcial: Notificaciones in-app, drag & drop, búsquedas, WebSockets para actualizaciones en tiempo real (Django Channels), despliegue en Railway/Render/Vercel.
+Resultado esperado: un producto funcional que integre frontend + backend, con pruebas, CI básico y documentación clara.
+________________________________________
+2) Objetivos de Aprendizaje
+1.	Diseñar una API REST limpia con DRF y permisos/roles adecuados.
+2.	Implementar autenticación JWT y proteger endpoints.
+3.	Consumir la API desde React con arquitectura de estado y rutas privadas.
+4.	Aplicar buenas prácticas: capas, tipado, validación, pruebas, manejo de errores.
+5.	Emplear git-flow y Pull Requests con code reviews ( con que implementen git y pueda visualizar los cambios en el respositorio es mas que suficiente)
+6.	Desplegar prototipo y documentar setup.
+________________________________________
+3) Requerimientos Funcionales
+•	Autenticación & Roles: Registro y login; roles estudiante y docente. Docente puede invitar a estudiantes a tableros del curso.
+•	Tableros: CRUD de tableros; visibilidad por miembros; color/tema opcional.
+•	Listas (Columnas): CRUD; ordenamiento.
+•	Tarjetas (Tareas): CRUD; campos: título, descripción, responsable(s), etiquetas, fecha límite, checklist, adjuntos (link o mock), prioridad.
+•	Comentarios & Actividad: thread en cada tarjeta; historial de actividades (creación, edición, movimiento, cierre).
+•	Búsqueda/Filtros: por etiqueta, responsable, vencimiento.
+•	Permisos: sólo miembros pueden ver/editar; estudiantes no borran tableros.
+•	UX: drag & drop de tarjetas entre listas; feedback visual de cargas/errores.
+Extensiones Opcionales (exoneración del examen parcial)
+•	Notificaciones en tiempo real (Channels + websockets).
+•	Integración de calendario (exportar .ics o vista mensual en FE).
+•	Subida de archivos a S3/Cloudinary (o mock en desarrollo).
+•	Recordatorios por correo (celery + redis) o cron del hosting.
+________________________________________
+4) Modelo de Datos (sugerido)
+User (Django)
+Profile: user(FK), role[student|teacher]
+Board: id, name, owner(FK->User), members(M2M->User), color, created_at
+List: id, board(FK), title, position
+Card: id, list(FK), title, description, due_date, priority[low|med|high], position, created_by(FK->User), assignees(M2M->User)
+Label: id, board(FK), name, color, cards(M2M->Card)
+Comment: id, card(FK), author(FK->User), content, created_at
+ChecklistItem: id, card(FK), text, done(bool)
+ActivityLog: id, board(FK), actor(FK->User), action, meta(JSON), created_at
+________________________________________
+5) Endpoints API (DRF)
+Auth
+•	POST /api/auth/register/
+•	POST /api/auth/login/ (JWT access/refresh)
+•	POST /api/auth/refresh/
+Usuarios/Perfil
+•	GET /api/me/ (perfil)
+•	PATCH /api/me/ (actualizar perfil/rol — rol editable sólo por docente/admin)
+Boards
+•	GET /api/boards/ (mis tableros)
+•	POST /api/boards/
+•	GET /api/boards/{id}/
+•	PATCH /api/boards/{id}/
+•	DELETE /api/boards/{id}/
+•	POST /api/boards/{id}/members/ (invitar o quitar miembro)
+•	GET /api/boards/{id}/activity/
+Lists
+•	POST /api/boards/{id}/lists/
+•	PATCH /api/lists/{id}/ (title, position)
+•	DELETE /api/lists/{id}/
+Cards
+•	POST /api/lists/{id}/cards/
+•	GET /api/cards/{id}/
+•	PATCH /api/cards/{id}/ (mover entre listas mediante list_id + position)
+•	DELETE /api/cards/{id}/
+•	POST /api/cards/{id}/assignees/
+•	POST /api/cards/{id}/labels/
+•	GET /api/cards/search/?q=...&label=...&assignee=...&due=...
+Comentarios & Checklist
+•	POST /api/cards/{id}/comments/
+•	GET /api/cards/{id}/comments/
+•	POST /api/cards/{id}/checklist/
+•	PATCH /api/checklist/{id}/
+Docs
+•	GET /api/schema/ (OpenAPI)
+•	GET /api/docs/ (Swagger/Redoc)
+________________________________________
+6) Requerimientos No Funcionales
+•	Seguridad: JWT, CORS, rate-limit básico (DRF throttle), validación de payload.
+•	Calidad: linters (ruff/flake8, eslint), formateadores (black/prettier).
+•	Pruebas: Pytest + DRF tests (backend) y Vitest/RTL (frontend).
+•	CI: GitHub Actions con jobs para lint + test.
+•	Observabilidad: logs estructurados; captura de errores FE (ErrorBoundary).
+•	Accesibilidad: labels, contraste, navegación por teclado, aria-attributes.
+________________________________________
+7) Arquitectura & Estructura de Repos
+Monorepo (sugerido) con carpetas separadas:
+kanban-academico/
+  backend/
+    app/
+    manage.py
+    requirements.txt
+  frontend/
+    src/
+    vite.config.ts
+    package.json
+  docs/
+  .github/workflows/ci.yml
+Bonos: Realtime (Channels), notificaciones, calendario, integración de archivos, internacionalización, dark mode.
+
+Historias de Usuario (ejemplos)
+•	Como docente, quiero crear un tablero para mi curso y agregar estudiantes para que organicen tareas.
+•	Como estudiante, quiero mover tarjetas por drag & drop para reflejar el avance.
+•	Como estudiante, quiero filtrar tarjetas por mis asignaciones y próximas a vencer.
+•	Como docente, quiero ver un historial de actividad para evaluar participación.
