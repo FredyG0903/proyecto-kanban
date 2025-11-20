@@ -43,7 +43,7 @@ export function BoardsPage() {
       <header className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Mis tableros</h1>
-          <p className="text-sm text-gray-600">Hola {user?.first_name || user?.username}</p>
+          <p className="text-sm text-gray-600">Hola {user?.username}</p>
         </div>
         <button className="text-sm text-red-600" onClick={logout}>Salir</button>
       </header>

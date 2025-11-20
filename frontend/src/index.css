@@ -7,6 +7,89 @@ html, body, #root {
 }
 
 body {
-	@apply bg-gray-50 text-gray-900;
+	font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+	transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Modo oscuro (default) */
+[data-theme="dark"] body {
+	@apply bg-gray-900 text-white;
+}
+
+/* Modo claro */
+[data-theme="light"] body {
+	@apply bg-gray-100 text-gray-900;
+}
+
+/* Estilos modernos para botones */
+@layer components {
+	.btn-modern {
+		@apply px-6 py-3 rounded-xl font-medium transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 active:translate-y-0;
+	}
+	
+	.btn-primary {
+		@apply btn-modern bg-blue-600 hover:bg-blue-700 text-white font-semibold;
+	}
+	
+	[data-theme="light"] .btn-primary {
+		@apply bg-blue-500 hover:bg-blue-600 text-white font-semibold;
+	}
+	
+	.btn-secondary {
+		@apply btn-modern bg-gray-700 hover:bg-gray-600 text-white font-semibold;
+	}
+	
+	[data-theme="light"] .btn-secondary {
+		@apply bg-gray-500 hover:bg-gray-600 text-white font-semibold;
+	}
+	
+	.btn-danger {
+		@apply btn-modern bg-red-600 hover:bg-red-700 text-white font-semibold;
+	}
+	
+	[data-theme="light"] .btn-danger {
+		@apply bg-red-500 hover:bg-red-600 text-white font-semibold;
+	}
+	
+	.btn-success {
+		@apply btn-modern bg-green-600 hover:bg-green-700 text-white font-semibold;
+	}
+	
+	[data-theme="light"] .btn-success {
+		@apply bg-green-500 hover:bg-green-600 text-white font-semibold;
+	}
+	
+	/* Inputs modernos - Modo oscuro */
+	.input-modern {
+		@apply w-full rounded-xl px-4 py-3 
+		focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent 
+		transition-all duration-200 shadow-sm hover:shadow-md;
+	}
+	
+	[data-theme="dark"] .input-modern {
+		@apply bg-gray-800 bg-opacity-60 backdrop-blur-md border border-gray-700 text-white placeholder-gray-400;
+	}
+	
+	[data-theme="light"] .input-modern {
+		@apply bg-white bg-opacity-80 backdrop-blur-md border border-gray-300 text-gray-900 placeholder-gray-500;
+	}
+	
+	/* Cards modernos - Modo oscuro */
+	.card-modern {
+		@apply rounded-xl p-4 
+		transition-all duration-200 shadow-lg hover:shadow-xl;
+	}
+	
+	[data-theme="dark"] .card-modern {
+		@apply bg-gray-800 bg-opacity-60 backdrop-blur-md border border-gray-700 
+		hover:bg-opacity-70 hover:border-gray-600;
+	}
+	
+	[data-theme="light"] .card-modern {
+		@apply bg-white bg-opacity-80 backdrop-blur-md border border-gray-200 
+		hover:bg-opacity-90 hover:border-gray-300;
+	}
 }
 

@@ -2,12 +2,12 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import api from '@/lib/api'
 import { useAuthStore } from '@/store/auth'
+import { BACKGROUND_IMAGE_URL } from '@/config/background'
+import { useThemeStore } from '@/store/theme'
 
 type User = {
   id: number
   username: string
-  first_name: string
-  last_name: string
 }
 
 type Board = {
@@ -43,6 +43,7 @@ export function BoardView() {
   const navigate = useNavigate()
   const user = useAuthStore(s => s.user)
   const logout = useAuthStore(s => s.logout)
+  const { theme } = useThemeStore()
 
   const [board, setBoard] = useState<Board | null>(null)
   const [lists, setLists] = useState<List[]>([])
@@ -85,7 +86,7 @@ export function BoardView() {
       setBoard(data)
     } catch (error) {
       console.error('Error al cargar tablero:', error)
-      navigate('/dashboard/teacher')
+      navigate(user?.role === 'teacher' ? '/dashboard/teacher' : '/dashboard/student')
     }
   }
 
@@ -361,24 +362,45 @@ export function BoardView() {
     return null
   }
 
+  // Verificar si el usuario es docente y dueño del tablero
+  const isTeacherOwner = user?.role === 'teacher' && board.owner.id === user?.id
+
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
+    <div 
+      className={`min-h-screen relative transition-colors duration-300 ${
+        theme === 'dark' ? 'text-white' : 'text-gray-900'
+      }`}
+      style={{
+        backgroundImage: BACKGROUND_IMAGE_URL,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundAttachment: 'fixed'
+      }}
+    >
+      {theme === 'dark' && (
+        <div className="absolute inset-0 bg-gray-900 bg-opacity-50 transition-all duration-300"></div>
+      )}
+      <div className="relative z-10">
       {/* Header */}
       <header
-        className="bg-gray-800 border-b border-gray-700 px-6 py-4 flex items-center justify-between"
+        className={`bg-opacity-60 backdrop-blur-md border-b px-6 py-4 flex items-center justify-between transition-all duration-300 ${
+          theme === 'dark' 
+            ? 'bg-gray-800 border-gray-700' 
+            : 'bg-white border-gray-300'
+        }`}
         style={{ borderTop: `4px solid ${board.color}` }}
       >
         <div className="flex items-center gap-4">
           <button
-            onClick={() => navigate('/dashboard/teacher')}
-            className="text-gray-400 hover:text-white transition"
+            onClick={() => navigate(user?.role === 'teacher' ? '/dashboard/teacher' : '/dashboard/student')}
+            className="btn-secondary text-sm"
           >
             ← Volver
           </button>
           <div>
-            <h1 className="text-2xl font-bold">{board.name}</h1>
+            <h1 className={`text-2xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{board.name}</h1>
             {board.due_date && (
-              <p className="text-sm text-gray-400">
+              <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-800'}`}>
                 📅 Fecha límite: {new Date(board.due_date).toLocaleDateString('es-ES')}
               </p>
             )}
@@ -387,20 +409,22 @@ export function BoardView() {
         <div className="flex items-center gap-4">
           <button
             onClick={() => setShowSearchModal(true)}
-            className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded transition"
+            className="btn-success"
           >
             🔍 Buscar
           </button>
-          <button
-            onClick={() => setShowMembersModal(true)}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded transition"
-          >
-            Gestionar Miembros
-          </button>
-          <span className="text-gray-400">¡Hola, {user?.first_name || user?.username}!</span>
+          {isTeacherOwner && (
+            <button
+              onClick={() => setShowMembersModal(true)}
+              className="btn-primary"
+            >
+              Gestionar Miembros
+            </button>
+          )}
+          <span className={theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}>¡Hola, {user?.username}!</span>
           <button
             onClick={logout}
-            className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded transition"
+            className="btn-danger"
           >
             Salir
           </button>
@@ -409,24 +433,50 @@ export function BoardView() {
 
       {/* Filtros activos */}
       {(searchFilter || filterAssignee || filterDue) && (
-        <div className="bg-gray-800 px-6 py-2 flex items-center gap-2 flex-wrap">
-          <span className="text-sm text-gray-400">Filtros activos:</span>
+        <div className={`bg-opacity-60 backdrop-blur-md px-6 py-2 flex items-center gap-2 flex-wrap transition-all duration-300 ${
+          theme === 'dark' ? 'bg-gray-800' : 'bg-white'
+        }`}>
+          <span className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-800'}`}>Filtros activos:</span>
           {searchFilter && (
-            <span className="px-2 py-1 bg-blue-600 rounded text-sm">
+            <span className={`px-3 py-1.5 rounded-lg text-sm font-semibold flex items-center gap-2 ${
+              theme === 'dark' ? 'bg-blue-600 text-white' : 'bg-blue-500 text-white'
+            }`}>
               Búsqueda: {searchFilter}
-              <button onClick={() => setSearchFilter('')} className="ml-2">×</button>
+              <button 
+                onClick={() => setSearchFilter('')} 
+                className="px-1.5 py-0.5 rounded-full bg-white bg-opacity-20 hover:bg-opacity-30 text-white font-bold transition-all duration-200"
+                title="Quitar filtro"
+              >
+                ×
+              </button>
             </span>
           )}
           {filterAssignee && (
-            <span className="px-2 py-1 bg-blue-600 rounded text-sm">
+            <span className={`px-3 py-1.5 rounded-lg text-sm font-semibold flex items-center gap-2 ${
+              theme === 'dark' ? 'bg-blue-600 text-white' : 'bg-blue-500 text-white'
+            }`}>
               Responsable: {allAssignees.find(a => a.id === filterAssignee)?.username}
-              <button onClick={() => setFilterAssignee(null)} className="ml-2">×</button>
+              <button 
+                onClick={() => setFilterAssignee(null)} 
+                className="px-1.5 py-0.5 rounded-full bg-white bg-opacity-20 hover:bg-opacity-30 text-white font-bold transition-all duration-200"
+                title="Quitar filtro"
+              >
+                ×
+              </button>
             </span>
           )}
           {filterDue && (
-            <span className="px-2 py-1 bg-blue-600 rounded text-sm">
+            <span className={`px-3 py-1.5 rounded-lg text-sm font-semibold flex items-center gap-2 ${
+              theme === 'dark' ? 'bg-blue-600 text-white' : 'bg-blue-500 text-white'
+            }`}>
               Vencimiento: {filterDue === 'overdue' ? 'Vencidas' : 'Próximas'}
-              <button onClick={() => setFilterDue('')} className="ml-2">×</button>
+              <button 
+                onClick={() => setFilterDue('')} 
+                className="px-1.5 py-0.5 rounded-full bg-white bg-opacity-20 hover:bg-opacity-30 text-white font-bold transition-all duration-200"
+                title="Quitar filtro"
+              >
+                ×
+              </button>
             </span>
           )}
         </div>
@@ -439,7 +489,7 @@ export function BoardView() {
           {lists.map(list => (
             <div
               key={list.id}
-              className={`bg-gray-800 rounded-lg p-4 flex flex-col ${
+              className={`card-modern flex flex-col ${
                 dragOverList === list.id ? 'ring-2 ring-blue-500' : ''
               }`}
               onDragOver={e => handleDragOver(e, list.id)}
@@ -452,7 +502,7 @@ export function BoardView() {
                   <div className="flex-1 flex gap-2">
                     <input
                       type="text"
-                      className="flex-1 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-sm"
+                      className="flex-1 bg-gray-700 bg-opacity-60 backdrop-blur-md border border-gray-600 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                       value={editListTitle}
                       onChange={e => setEditListTitle(e.target.value)}
                       autoFocus
@@ -477,23 +527,33 @@ export function BoardView() {
                     >
                       {list.title}
                     </h3>
-                    <span className="text-sm text-gray-400">
+                    <span className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-700'}`}>
                       ({getCardsForList(list.id).length})
                     </span>
-                    {board.owner.id === user?.id && (
+                    {isTeacherOwner && (
                       <div className="flex gap-1 ml-2">
                         <button
                           onClick={() => {
                             setEditingListId(list.id)
                             setEditListTitle(list.title)
                           }}
-                          className="text-gray-400 hover:text-white text-sm"
+                          className={`p-1.5 rounded-lg transition-all duration-200 ${
+                            theme === 'dark' 
+                              ? 'bg-gray-700 hover:bg-gray-600 text-white' 
+                              : 'bg-gray-200 hover:bg-gray-300 text-gray-900'
+                          }`}
+                          title="Editar columna"
                         >
                           ✏️
                         </button>
                         <button
                           onClick={() => deleteList(list.id)}
-                          className="text-gray-400 hover:text-red-400 text-sm"
+                          className={`p-1.5 rounded-lg transition-all duration-200 ${
+                            theme === 'dark' 
+                              ? 'bg-red-600 hover:bg-red-700 text-white' 
+                              : 'bg-red-500 hover:bg-red-600 text-white'
+                          }`}
+                          title="Eliminar columna"
                         >
                           🗑️
                         </button>
@@ -510,9 +570,9 @@ export function BoardView() {
                     key={card.id}
                     draggable
                     onDragStart={e => handleDragStart(e, card)}
-                    className={`bg-gray-700 rounded p-3 border-l-4 ${getPriorityColor(
+                    className={`bg-gray-700 bg-opacity-60 backdrop-blur-md rounded-xl p-3 border-l-4 ${getPriorityColor(
                       card.priority
-                    )} cursor-move hover:bg-gray-600 transition relative group`}
+                    )} cursor-move hover:bg-opacity-70 transition-all duration-200 shadow-md hover:shadow-lg relative group`}
                   >
                     <div 
                       className="flex items-start justify-between gap-2"
@@ -521,7 +581,9 @@ export function BoardView() {
                       <div className="flex-1">
                         <div className="font-medium mb-1">{card.title}</div>
                         {card.description && (
-                          <div className="text-sm text-gray-400 mb-2 line-clamp-2">
+                          <div className={`text-sm mb-2 line-clamp-2 ${
+                            theme === 'dark' ? 'text-gray-400' : 'text-gray-700'
+                          }`}>
                             {card.description}
                           </div>
                         )}
@@ -531,32 +593,40 @@ export function BoardView() {
                           </div>
                         )}
                         {card.assignees.length > 0 && (
-                          <div className="text-xs text-gray-400 mt-2">
+                          <div className={`text-xs mt-2 ${
+                            theme === 'dark' ? 'text-gray-400' : 'text-gray-700'
+                          }`}>
                             👤 {card.assignees.map(a => a.username).join(', ')}
                           </div>
                         )}
                       </div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          deleteCard(card.id)
-                        }}
-                        className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-400 transition text-sm"
-                        title="Eliminar tarjeta"
-                      >
-                        🗑️
-                      </button>
+                      {isTeacherOwner && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            deleteCard(card.id)
+                          }}
+                          className={`opacity-0 group-hover:opacity-100 transition-all duration-200 text-sm p-1.5 rounded-lg ${
+                            theme === 'dark' 
+                              ? 'bg-red-600 hover:bg-red-700 text-white' 
+                              : 'bg-red-500 hover:bg-red-600 text-white'
+                          }`}
+                          title="Eliminar tarjeta"
+                        >
+                          🗑️
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}
               </div>
 
-              {/* Botón para agregar tarjeta */}
-              {showNewCardForm === list.id ? (
+              {/* Botón para agregar tarjeta (solo docentes dueños) */}
+              {isTeacherOwner && showNewCardForm === list.id ? (
                 <form onSubmit={e => createCard(e, list.id)} className="space-y-2">
                   <input
                     type="text"
-                    className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="input-modern"
                     placeholder="Título de la tarjeta..."
                     value={newCardTitle}
                     onChange={e => setNewCardTitle(e.target.value)}
@@ -565,7 +635,7 @@ export function BoardView() {
                   />
                   <input
                     type="date"
-                    className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="input-modern"
                     placeholder="Fecha límite (opcional)"
                     value={newCardDueDate}
                     onChange={e => setNewCardDueDate(e.target.value)}
@@ -576,7 +646,7 @@ export function BoardView() {
                   <div className="flex gap-2">
                     <button
                       type="submit"
-                      className="flex-1 bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded text-sm"
+                      className="btn-primary text-sm px-3 py-1"
                     >
                       Agregar
                     </button>
@@ -587,26 +657,30 @@ export function BoardView() {
                         setNewCardTitle('')
                         setNewCardDueDate('')
                       }}
-                      className="px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded text-sm"
+                      className="btn-secondary text-sm px-3 py-1"
                     >
                       Cancelar
                     </button>
                   </div>
                 </form>
-              ) : (
+              ) : isTeacherOwner ? (
                 <button
                   onClick={() => setShowNewCardForm(list.id)}
-                  className="w-full text-left text-gray-400 hover:text-white hover:bg-gray-700 px-3 py-2 rounded transition"
+                  className={`w-full text-left px-4 py-2.5 rounded-lg font-medium transition-all duration-200 ${
+                    theme === 'dark' 
+                      ? 'bg-gray-700 hover:bg-gray-600 text-white border border-gray-600 hover:border-gray-500 shadow-sm hover:shadow-md' 
+                      : 'bg-gray-200 hover:bg-gray-300 text-gray-900 border border-gray-300 hover:border-gray-400 shadow-sm hover:shadow-md'
+                  }`}
                 >
                   + Agregar tarjeta
                 </button>
-              )}
+              ) : null}
             </div>
           ))}
 
-          {/* Botón para nueva columna */}
-          {showNewListForm ? (
-            <div className="bg-gray-800 rounded-lg p-4">
+          {/* Botón para nueva columna (solo docentes dueños) */}
+          {isTeacherOwner && showNewListForm ? (
+            <div className="bg-gray-800 bg-opacity-60 backdrop-blur-md rounded-lg p-4">
               <form onSubmit={createList} className="space-y-2">
                 <input
                   type="text"
@@ -619,7 +693,7 @@ export function BoardView() {
                 <div className="flex gap-2">
                   <button
                     type="submit"
-                    className="flex-1 bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded"
+                    className="btn-primary text-sm px-3 py-2"
                   >
                     Crear
                   </button>
@@ -629,33 +703,41 @@ export function BoardView() {
                       setShowNewListForm(false)
                       setNewListTitle('')
                     }}
-                    className="px-3 py-2 bg-gray-600 hover:bg-gray-500 rounded"
+                    className="btn-secondary text-sm px-3 py-2"
                   >
                     Cancelar
                   </button>
                 </div>
               </form>
             </div>
-          ) : (
+          ) : isTeacherOwner ? (
             <button
               onClick={() => setShowNewListForm(true)}
-              className="bg-gray-800 hover:bg-gray-700 rounded-lg p-4 flex items-center justify-center gap-2 transition min-h-[200px]"
+              className={`bg-opacity-60 backdrop-blur-md hover:bg-opacity-70 rounded-xl p-4 flex items-center justify-center gap-2 transition-all duration-200 min-h-[200px] border-2 border-dashed shadow-lg hover:shadow-xl ${
+                theme === 'dark'
+                  ? 'bg-gray-800 border-gray-600 hover:border-gray-500 text-white'
+                  : 'bg-white border-gray-300 hover:border-gray-400 text-gray-900'
+              }`}
             >
-              <span className="text-2xl">+</span>
-              <span>Nueva Columna</span>
+              <span className="text-2xl font-bold">+</span>
+              <span className="font-semibold text-lg">Nueva Columna</span>
             </button>
-          )}
+          ) : null}
         </div>
       </main>
 
       {/* Modal de búsqueda y filtros */}
       {showSearchModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md">
+          <div className={`bg-opacity-70 backdrop-blur-md rounded-lg p-6 w-full max-w-md transition-all duration-300 ${
+            theme === 'dark' ? 'bg-gray-800' : 'bg-white'
+          }`}>
             <h2 className="text-xl font-bold mb-4">Buscar y Filtrar Tarjetas</h2>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium mb-1">Búsqueda de texto</label>
+                <label className={`block text-sm font-medium mb-1 ${
+                  theme === 'dark' ? 'text-gray-300' : 'text-gray-800'
+                }`}>Búsqueda de texto</label>
                 <input
                   type="text"
                   className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2"
@@ -700,13 +782,13 @@ export function BoardView() {
                   setFilterDue('')
                   setShowSearchModal(false)
                 }}
-                className="flex-1 px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded"
+                className="btn-secondary flex-1"
               >
                 Limpiar
               </button>
               <button
                 onClick={() => setShowSearchModal(false)}
-                className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded"
+                className="btn-primary flex-1"
               >
                 Cerrar
               </button>
@@ -718,7 +800,9 @@ export function BoardView() {
       {/* Modal de gestión de miembros */}
       {showMembersModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md">
+          <div className={`bg-opacity-70 backdrop-blur-md rounded-lg p-6 w-full max-w-md transition-all duration-300 ${
+            theme === 'dark' ? 'bg-gray-800' : 'bg-white'
+          }`}>
             <h2 className="text-xl font-bold mb-4">Gestionar Miembros</h2>
             <div className="mb-4">
               <h3 className="font-semibold mb-2">Miembros actuales:</h3>
@@ -729,10 +813,14 @@ export function BoardView() {
                 {board.members.map(member => (
                   <div key={member.id} className="flex items-center justify-between p-2 bg-gray-700 rounded">
                     <span>{member.username}</span>
-                    {board.owner.id === user?.id && (
+                    {isTeacherOwner && (
                       <button
                         onClick={() => removeMember(member.id)}
-                        className="text-red-400 hover:text-red-300 text-sm"
+                        className={`px-3 py-1.5 rounded-lg font-medium text-sm transition-all duration-200 ${
+                          theme === 'dark'
+                            ? 'bg-red-600 hover:bg-red-700 text-white shadow-md hover:shadow-lg'
+                            : 'bg-red-500 hover:bg-red-600 text-white shadow-md hover:shadow-lg'
+                        }`}
                       >
                         Remover
                       </button>
@@ -741,7 +829,7 @@ export function BoardView() {
                 ))}
               </div>
             </div>
-            {board.owner.id === user?.id && (
+            {isTeacherOwner && (
               <form onSubmit={inviteMemberByUsername} className="space-y-2">
                 <input
                   type="text"
@@ -750,7 +838,7 @@ export function BoardView() {
                   value={inviteUsername}
                   onChange={e => setInviteUsername(e.target.value)}
                 />
-                <p className="text-xs text-gray-400">
+                <p className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-700'}`}>
                   Ingresa el ID de 10 dígitos o el nombre de usuario
                 </p>
                 <div className="flex gap-2">
@@ -773,6 +861,7 @@ export function BoardView() {
           </div>
         </div>
       )}
+      </div>
     </div>
   )
 }

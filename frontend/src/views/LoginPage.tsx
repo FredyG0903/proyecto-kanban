@@ -52,7 +52,7 @@ export function LoginPage() {
 
   return (
     <div className="min-h-screen grid place-items-center bg-gray-900">
-      <div className="bg-gray-800 p-8 rounded-lg shadow-md w-full max-w-md border border-gray-700">
+      <div className="bg-gray-800 bg-opacity-80 backdrop-blur-md p-8 rounded-2xl shadow-2xl w-full max-w-md border border-gray-700">
         <div className="flex gap-4 mb-6">
           <button
             type="button"
@@ -68,9 +68,9 @@ export function LoginPage() {
           <button
             type="button"
             onClick={() => setMode('register')}
-            className={`flex-1 py-2 px-4 rounded font-medium transition ${
+            className={`flex-1 py-2 px-4 rounded-xl font-medium transition-all duration-200 ${
               mode === 'register'
-                ? 'bg-blue-600 text-white'
+                ? 'bg-blue-600 text-white shadow-lg'
                 : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
             }`}
           >
@@ -87,7 +87,7 @@ export function LoginPage() {
               <label className="block text-sm font-medium mb-1 text-gray-300">Usuario</label>
               <input
                 type="text"
-                className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="input-modern"
                 {...regLogin('username', { required: true })}
               />
             </div>
@@ -112,7 +112,7 @@ export function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
             >
               {loading ? 'Entrando...' : 'Entrar'}
             </button>
@@ -150,7 +150,7 @@ export function LoginPage() {
               <label className="block text-sm font-medium mb-1 text-gray-300">Email</label>
               <input
                 type="email"
-                className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="input-modern"
                 {...regRegister('email', { required: 'El email es requerido' })}
               />
               {registerErrors.email && (
@@ -242,7 +242,7 @@ export function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="btn-success w-full disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
             >
               {loading ? 'Creando...' : 'Registrarse'}
             </button>

@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import api from '@/lib/api'
 import { useAuthStore } from '@/store/auth'
 import { useNavigate } from 'react-router-dom'
+import { BACKGROUND_IMAGE_URL } from '@/config/background'
+import { useThemeStore } from '@/store/theme'
 
 type Board = {
   id: number
@@ -16,6 +18,7 @@ export function TeacherDashboard() {
   const user = useAuthStore(s => s.user)
   const logout = useAuthStore(s => s.logout)
   const navigate = useNavigate()
+  const { theme, toggleTheme } = useThemeStore()
   const [boards, setBoards] = useState<Board[]>([])
   const [loading, setLoading] = useState(false)
   const [name, setName] = useState('')
@@ -95,26 +98,45 @@ export function TeacherDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
+    <div 
+      className={`min-h-screen relative transition-colors duration-300 ${
+        theme === 'dark' ? 'text-white' : 'text-gray-900'
+      }`}
+      style={{
+        backgroundImage: BACKGROUND_IMAGE_URL,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundAttachment: 'fixed'
+      }}
+    >
+      {theme === 'dark' && (
+        <div className="absolute inset-0 bg-gray-900 bg-opacity-50 transition-all duration-300"></div>
+      )}
+      <div className="relative z-10">
       {/* Header */}
-      <header className="bg-gray-800 border-b border-gray-700 px-6 py-4">
+      <header className={`bg-opacity-60 backdrop-blur-md border-b px-6 py-4 transition-all duration-300 ${
+        theme === 'dark' 
+          ? 'bg-gray-800 border-gray-700' 
+          : 'bg-white border-gray-300'
+      }`}>
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold">Gestor de Tareas</h1>
-            <p className="text-sm text-gray-400">¡Hola, {user?.first_name || user?.username}!</p>
+            <h1 className={`text-2xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>Gestor de Tareas</h1>
+            <p className={`text-lg font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>¡Hola, {user?.username}!</p>
+            <p className={`font-medium ${theme === 'dark' ? 'text-sm text-blue-400' : 'text-base text-blue-600'}`}>Docente</p>
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowProfile(true)}
-              className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded transition text-sm"
+              className="btn-secondary text-sm"
             >
               👤 Mi Perfil
             </button>
             <button
               onClick={logout}
-              className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded transition text-sm"
+              className="btn-danger text-sm"
             >
-              Sesión
+              Salir
             </button>
           </div>
         </div>
@@ -122,11 +144,11 @@ export function TeacherDashboard() {
 
       <main className="max-w-7xl mx-auto px-6 py-8">
         <div className="mb-6">
-          <h2 className="text-xl font-semibold mb-4">Mis Tableros</h2>
+          <h2 className={`text-xl font-semibold mb-4 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>Mis Tableros</h2>
           <form onSubmit={createBoard} className="space-y-2 mb-4">
             <div className="flex gap-2">
               <input
-                className="bg-gray-800 border border-gray-700 rounded px-4 py-2 flex-1 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="input-modern flex-1"
                 placeholder="Nombre del tablero"
                 value={name}
                 onChange={e => setName(e.target.value)}
@@ -142,13 +164,13 @@ export function TeacherDashboard() {
             <div className="flex gap-2">
               <input
                 type="date"
-                className="bg-gray-800 border border-gray-700 rounded px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="input-modern"
                 placeholder="Fecha límite del proyecto"
                 value={dueDate}
                 onChange={e => setDueDate(e.target.value)}
                 min={new Date().toISOString().split('T')[0]}
               />
-              <button className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 transition">
+              <button className="btn-primary">
                 Crear Tablero
               </button>
             </div>
@@ -156,12 +178,14 @@ export function TeacherDashboard() {
         </div>
 
         {loading ? (
-          <div className="text-center py-8 text-gray-400">Cargando tableros...</div>
+          <div className={`text-center py-8 font-medium ${theme === 'dark' ? 'text-gray-400' : 'text-gray-800'}`}>Cargando tableros...</div>
         ) : boards.length === 0 ? (
           <div className="text-center py-16">
-            <div className="bg-gray-800 rounded-lg p-8 max-w-md mx-auto">
-              <h3 className="text-xl font-semibold mb-2">¡Bienvenido a tu Tablero!</h3>
-              <p className="text-gray-400 mb-4">
+            <div className={`bg-opacity-60 backdrop-blur-md rounded-lg p-8 max-w-md mx-auto ${
+              theme === 'dark' ? 'bg-gray-800' : 'bg-white'
+            }`}>
+              <h3 className={`text-xl font-semibold mb-2 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>¡Bienvenido a tu Tablero!</h3>
+              <p className={`mb-4 font-medium ${theme === 'dark' ? 'text-gray-400' : 'text-gray-800'}`}>
                 Comienza creando un tablero para organizar tus cursos y tareas
               </p>
             </div>
@@ -171,12 +195,12 @@ export function TeacherDashboard() {
             {boards.map(board => (
               <div
                 key={board.id}
-                className="bg-gray-800 rounded-lg p-4 border border-gray-700 hover:bg-gray-750 hover:border-gray-600 transition relative"
+                className="card-modern relative"
                 style={{ borderTop: `4px solid ${board.color}` }}
               >
                 <div className="flex items-start justify-between mb-2">
                   <div 
-                    className="font-medium text-white flex-1 cursor-pointer"
+                    className={`font-semibold flex-1 cursor-pointer ${theme === 'dark' ? 'text-white text-base' : 'text-gray-900 text-lg'}`}
                     onClick={() => navigate(`/board/${board.id}`)}
                   >
                     {board.name}
@@ -186,21 +210,25 @@ export function TeacherDashboard() {
                       e.stopPropagation()
                       openEditModal(board)
                     }}
-                    className="ml-2 text-gray-400 hover:text-white transition"
+                    className={`ml-2 transition-colors ${
+                      theme === 'dark' 
+                        ? 'text-gray-400 hover:text-white' 
+                        : 'text-gray-700 hover:text-gray-900'
+                    }`}
                     title="Editar tablero"
                   >
                     ✏️
                   </button>
                 </div>
                 <div 
-                  className="text-xs text-gray-400 cursor-pointer"
+                  className={`cursor-pointer font-medium ${theme === 'dark' ? 'text-xs text-gray-400' : 'text-sm text-gray-800'}`}
                   onClick={() => navigate(`/board/${board.id}`)}
                 >
                   {board.members.length} miembro{board.members.length !== 1 ? 's' : ''}
                 </div>
                 {board.due_date && (
                   <div 
-                    className="text-xs text-gray-500 mt-1 cursor-pointer"
+                    className={`mt-1 cursor-pointer font-medium ${theme === 'dark' ? 'text-xs text-gray-500' : 'text-sm text-gray-700'}`}
                     onClick={() => navigate(`/board/${board.id}`)}
                   >
                     📅 {new Date(board.due_date).toLocaleDateString()}
@@ -215,7 +243,9 @@ export function TeacherDashboard() {
       {/* Modal de Edición de Tablero */}
       {editingBoard && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={closeEditModal}>
-          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+          <div className={`bg-opacity-70 backdrop-blur-md rounded-lg p-6 w-full max-w-md transition-all duration-300 ${
+            theme === 'dark' ? 'bg-gray-800' : 'bg-white'
+          }`} onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-2xl font-bold">Editar Tablero</h2>
               <button
@@ -227,10 +257,10 @@ export function TeacherDashboard() {
             </div>
             <form onSubmit={updateBoard} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium mb-1 text-gray-300">Nombre del tablero</label>
+                <label className={`block text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>Nombre del tablero</label>
                 <input
                   type="text"
-                  className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="input-modern"
                   placeholder="Nombre del tablero"
                   value={editName}
                   onChange={e => setEditName(e.target.value)}
@@ -238,7 +268,7 @@ export function TeacherDashboard() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1 text-gray-300">Color</label>
+                <label className={`block text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>Color</label>
                 <input
                   type="color"
                   value={editColor}
@@ -247,10 +277,10 @@ export function TeacherDashboard() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1 text-gray-300">Fecha límite del proyecto</label>
+                <label className={`block text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>Fecha límite del proyecto</label>
                 <input
                   type="date"
-                  className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="input-modern"
                   value={editDueDate}
                   onChange={e => setEditDueDate(e.target.value)}
                   min={new Date().toISOString().split('T')[0]}
@@ -260,13 +290,13 @@ export function TeacherDashboard() {
                 <button
                   type="button"
                   onClick={closeEditModal}
-                  className="px-4 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded transition"
+                  className="btn-secondary"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition"
+                  className="btn-primary"
                 >
                   Guardar Cambios
                 </button>
@@ -279,46 +309,55 @@ export function TeacherDashboard() {
       {/* Modal de Perfil */}
       {showProfile && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowProfile(false)}>
-          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+          <div className={`bg-opacity-70 backdrop-blur-md rounded-lg p-6 w-full max-w-md transition-all duration-300 ${
+            theme === 'dark' ? 'bg-gray-800' : 'bg-white'
+          }`} onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-2xl font-bold">Mi Perfil</h2>
+              <h2 className={`text-2xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>Mi Perfil</h2>
               <button
                 onClick={() => setShowProfile(false)}
-                className="text-gray-400 hover:text-white text-2xl"
+                className={`text-2xl transition-colors ${
+                  theme === 'dark' ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'
+                }`}
               >
                 ×
               </button>
             </div>
             <div className="space-y-4">
-              <div className="bg-gray-700 rounded-lg p-4">
-                <label className="text-sm text-gray-400 block mb-1">Usuario</label>
-                <p className="text-white font-medium">{user?.username || 'N/A'}</p>
+              <div className={`rounded-lg p-4 ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                <label className={`block mb-1 font-medium ${theme === 'dark' ? 'text-sm text-gray-400' : 'text-base text-gray-700'}`}>Usuario</label>
+                <p className={`font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{user?.username || 'N/A'}</p>
               </div>
-              <div className="bg-gray-700 rounded-lg p-4">
-                <label className="text-sm text-gray-400 block mb-1">Email</label>
-                <p className="text-white font-medium">{user?.email || 'N/A'}</p>
+              <div className={`rounded-lg p-4 ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                <label className={`block mb-1 font-medium ${theme === 'dark' ? 'text-sm text-gray-400' : 'text-base text-gray-700'}`}>Email</label>
+                <p className={`font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{user?.email || 'N/A'}</p>
               </div>
-              <div className="bg-gray-700 rounded-lg p-4">
-                <label className="text-sm text-gray-400 block mb-1">ID (10 dígitos)</label>
-                <p className="text-white font-medium">{user?.id_number || 'N/A'}</p>
+              <div className={`rounded-lg p-4 ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                <label className={`block mb-1 font-medium ${theme === 'dark' ? 'text-sm text-gray-400' : 'text-base text-gray-700'}`}>ID (10 dígitos)</label>
+                <p className={`font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{user?.id_number || 'N/A'}</p>
               </div>
-              <div className="bg-gray-700 rounded-lg p-4">
-                <label className="text-sm text-gray-400 block mb-1">Rol</label>
-                <p className="text-white font-medium">
+              <div className={`rounded-lg p-4 ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                <label className={`block mb-1 font-medium ${theme === 'dark' ? 'text-sm text-gray-400' : 'text-base text-gray-700'}`}>Rol</label>
+                <p className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
                   {user?.role === 'teacher' ? 'Docente' : user?.role === 'student' ? 'Estudiante' : 'N/A'}
                 </p>
               </div>
-              {user?.first_name && (
-                <div className="bg-gray-700 rounded-lg p-4">
-                  <label className="text-sm text-gray-400 block mb-1">Nombre</label>
-                  <p className="text-white font-medium">{user.first_name} {user.last_name || ''}</p>
-                </div>
-              )}
             </div>
-            <div className="mt-6 flex justify-end">
+            <div className="mt-6 flex items-center justify-between">
+                <button
+                  onClick={toggleTheme}
+                  className={`p-2 rounded-lg transition-all duration-200 text-xl ${
+                    theme === 'dark' 
+                      ? 'bg-gray-700 hover:bg-gray-600' 
+                      : 'bg-gray-200 hover:bg-gray-300'
+                  }`}
+                  title={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+                >
+                  {theme === 'dark' ? '☀️' : '🌙'}
+                </button>
               <button
                 onClick={() => setShowProfile(false)}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded transition"
+                className="btn-primary"
               >
                 Cerrar
               </button>
@@ -326,6 +365,7 @@ export function TeacherDashboard() {
           </div>
         </div>
       )}
+      </div>
     </div>
   )
 }

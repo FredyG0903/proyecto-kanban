@@ -6,7 +6,7 @@ from .models import Board, List, Card, Label, Comment, ChecklistItem, ActivityLo
 class UserSlimSerializer(serializers.ModelSerializer):
 	class Meta:
 		model = User
-		fields = ("id", "username", "first_name", "last_name")
+		fields = ("id", "username")
 
 
 class BoardSerializer(serializers.ModelSerializer):
