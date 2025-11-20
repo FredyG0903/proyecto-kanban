@@ -20,6 +20,7 @@ class Board(models.Model):
 	owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="owned_boards")
 	members = models.ManyToManyField(User, related_name="boards", blank=True)
 	color = models.CharField(max_length=20, blank=True, default="")
+	due_date = models.DateField(null=True, blank=True, help_text="Fecha límite del proyecto/tablero")
 	created_at = models.DateTimeField(auto_now_add=True)
 
 	class Meta:

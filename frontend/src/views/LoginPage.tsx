@@ -8,6 +8,8 @@ type RegisterFormData = { username: string; email?: string; password: string; ro
 
 export function LoginPage() {
   const [mode, setMode] = useState<'login' | 'register'>('login')
+  const [showLoginPassword, setShowLoginPassword] = useState(false)
+  const [showRegisterPassword, setShowRegisterPassword] = useState(false)
   const { register: regLogin, handleSubmit: handleLogin, formState: { errors: loginErrors } } = useForm<LoginFormData>()
   const { register: regRegister, handleSubmit: handleRegister, formState: { errors: registerErrors } } = useForm<RegisterFormData>()
   const login = useAuthStore(s => s.login)
@@ -49,8 +51,8 @@ export function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen grid place-items-center bg-gray-50">
-      <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
+    <div className="min-h-screen grid place-items-center bg-gray-900">
+      <div className="bg-gray-800 p-8 rounded-lg shadow-md w-full max-w-md border border-gray-700">
         <div className="flex gap-4 mb-6">
           <button
             type="button"
@@ -58,7 +60,7 @@ export function LoginPage() {
             className={`flex-1 py-2 px-4 rounded font-medium transition ${
               mode === 'login'
                 ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
             }`}
           >
             Iniciar Sesión
@@ -69,33 +71,43 @@ export function LoginPage() {
             className={`flex-1 py-2 px-4 rounded font-medium transition ${
               mode === 'register'
                 ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
             }`}
           >
             Registrarse
           </button>
         </div>
 
-        {error && <div className="mb-4 p-3 text-sm text-red-600 bg-red-50 rounded">{error}</div>}
+        {error && <div className="mb-4 p-3 text-sm text-red-400 bg-red-900 bg-opacity-30 rounded border border-red-800">{error}</div>}
 
         {mode === 'login' ? (
           <form onSubmit={handleLogin(onLogin)} className="space-y-4">
-            <h2 className="text-2xl font-semibold mb-4">Iniciar Sesión</h2>
+            <h2 className="text-2xl font-semibold mb-4 text-white">Iniciar Sesión</h2>
             <div>
-              <label className="block text-sm font-medium mb-1">Usuario</label>
+              <label className="block text-sm font-medium mb-1 text-gray-300">Usuario</label>
               <input
                 type="text"
-                className="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 {...regLogin('username', { required: true })}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Contraseña</label>
-              <input
-                type="password"
-                className="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                {...regLogin('password', { required: true })}
-              />
+              <label className="block text-sm font-medium mb-1 text-gray-300">Contraseña</label>
+              <div className="relative">
+                <input
+                  type={showLoginPassword ? 'text' : 'password'}
+                  className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 pr-10 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  {...regLogin('password', { required: true })}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowLoginPassword(!showLoginPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200 focus:outline-none"
+                  tabIndex={-1}
+                >
+                  {showLoginPassword ? '🙈' : '👁️'}
+                </button>
+              </div>
             </div>
             <button
               type="submit"
@@ -107,13 +119,13 @@ export function LoginPage() {
           </form>
         ) : (
           <form onSubmit={handleRegister(onRegister)} className="space-y-4">
-            <h2 className="text-2xl font-semibold mb-4">Crear Cuenta</h2>
+            <h2 className="text-2xl font-semibold mb-4 text-white">Crear Cuenta</h2>
             <div>
-              <label className="block text-sm font-medium mb-1">Usuario</label>
+              <label className="block text-sm font-medium mb-1 text-gray-300">Usuario</label>
               <input
                 type="text"
-                className={`w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                  registerErrors.username ? 'border-red-500' : ''
+                className={`w-full bg-gray-700 border rounded px-3 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                  registerErrors.username ? 'border-red-500' : 'border-gray-600'
                 }`}
                 {...regRegister('username', {
                   required: 'El usuario es requerido',
@@ -135,10 +147,10 @@ export function LoginPage() {
               )}
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Email</label>
+              <label className="block text-sm font-medium mb-1 text-gray-300">Email</label>
               <input
                 type="email"
-                className="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 {...regRegister('email', { required: 'El email es requerido' })}
               />
               {registerErrors.email && (
@@ -148,11 +160,11 @@ export function LoginPage() {
               )}
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">ID (10 dígitos)</label>
+              <label className="block text-sm font-medium mb-1 text-gray-300">ID (10 dígitos)</label>
               <input
                 type="text"
-                className={`w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                  registerErrors.id_number ? 'border-red-500' : ''
+                className={`w-full bg-gray-700 border rounded px-3 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                  registerErrors.id_number ? 'border-red-500' : 'border-gray-600'
                 }`}
                 {...regRegister('id_number', {
                   required: 'El ID es requerido',
@@ -179,20 +191,30 @@ export function LoginPage() {
               )}
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Contraseña</label>
-              <input
-                type="password"
-                className={`w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                  registerErrors.password ? 'border-red-500' : ''
-                }`}
-                {...regRegister('password', {
-                  required: 'La contraseña es requerida',
-                  minLength: {
-                    value: 8,
-                    message: 'La contraseña debe tener al menos 8 caracteres',
-                  },
-                })}
-              />
+              <label className="block text-sm font-medium mb-1 text-gray-300">Contraseña</label>
+              <div className="relative">
+                <input
+                  type={showRegisterPassword ? 'text' : 'password'}
+                  className={`w-full bg-gray-700 border rounded px-3 py-2 pr-10 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                    registerErrors.password ? 'border-red-500' : 'border-gray-600'
+                  }`}
+                  {...regRegister('password', {
+                    required: 'La contraseña es requerida',
+                    minLength: {
+                      value: 8,
+                      message: 'La contraseña debe tener al menos 8 caracteres',
+                    },
+                  })}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowRegisterPassword(!showRegisterPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200 focus:outline-none"
+                  tabIndex={-1}
+                >
+                  {showRegisterPassword ? '🙈' : '👁️'}
+                </button>
+              </div>
               {registerErrors.password && (
                 <p className="text-xs text-red-500 mt-1">
                   {registerErrors.password.message as string}
@@ -200,10 +222,10 @@ export function LoginPage() {
               )}
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Rol</label>
+              <label className="block text-sm font-medium mb-1 text-gray-300">Rol</label>
               <select
-                className={`w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                  registerErrors.role ? 'border-red-500' : ''
+                className={`w-full bg-gray-700 border rounded px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                  registerErrors.role ? 'border-red-500' : 'border-gray-600'
                 }`}
                 {...regRegister('role', { required: 'Debes seleccionar un rol' })}
               >

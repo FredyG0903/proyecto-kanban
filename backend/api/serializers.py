@@ -15,7 +15,7 @@ class BoardSerializer(serializers.ModelSerializer):
 
 	class Meta:
 		model = Board
-		fields = ("id", "name", "owner", "members", "color", "created_at")
+		fields = ("id", "name", "owner", "members", "color", "due_date", "created_at")
 		read_only_fields = ("id", "owner", "members", "created_at")
 
 
@@ -37,6 +37,7 @@ class CardSerializer(serializers.ModelSerializer):
 	assignees = UserSlimSerializer(many=True, read_only=True)
 	labels = LabelSerializer(many=True, read_only=True)
 	created_by = UserSlimSerializer(read_only=True)
+	list = serializers.PrimaryKeyRelatedField(queryset=List.objects.all(), required=False)
 
 	class Meta:
 		model = Card

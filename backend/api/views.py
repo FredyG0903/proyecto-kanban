@@ -7,6 +7,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework import viewsets, decorators
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from django.db.models import Q
+from datetime import date, timedelta
 
 from .models import Board, List, Card, Profile, Label, Comment, ChecklistItem, ActivityLog
 from .serializers import (
@@ -112,6 +113,42 @@ def create_activity_log(board, actor, action, meta=None):
 	ActivityLog.objects.create(board=board, actor=actor, action=action, meta=meta or {})
 
 
+# Helper function para calcular prioridad automática basada en fechas
+def calculate_auto_priority(card_due_date, board_due_date):
+	"""
+	Calcula la prioridad automática de una tarjeta basándose en qué tan cerca está
+	la fecha límite de la tarjeta de la fecha límite del tablero.
+	
+	- Si la tarjeta está en el último 25% del tiempo restante: HIGH
+	- Si está en el 25-50%: MED
+	- Si está en el 50-100%: LOW
+	"""
+	if not card_due_date or not board_due_date:
+		return Card.Priority.MED
+	
+	today = date.today()
+	days_until_card = (card_due_date - today).days
+	days_until_board = (board_due_date - today).days
+	
+	if days_until_board <= 0:
+		# Si el tablero ya venció, todo es alta prioridad
+		return Card.Priority.HIGH
+	
+	if days_until_card <= 0:
+		# Si la tarjeta ya venció, es alta prioridad
+		return Card.Priority.HIGH
+	
+	# Calcular qué porcentaje del tiempo restante representa la tarjeta
+	percentage = (days_until_card / days_until_board) * 100
+	
+	if percentage <= 25:
+		return Card.Priority.HIGH
+	elif percentage <= 50:
+		return Card.Priority.MED
+	else:
+		return Card.Priority.LOW
+
+
 class BoardViewSet(viewsets.ModelViewSet):
 	serializer_class = BoardSerializer
 	permission_classes = [IsAuthenticated]
@@ -129,6 +166,14 @@ class BoardViewSet(viewsets.ModelViewSet):
 		board = self.get_object()
 		if board.owner != self.request.user:
 			raise PermissionDenied("Sólo el propietario puede editar el tablero.")
+		# Validar que solo docentes puedan editar la fecha límite
+		if 'due_date' in serializer.validated_data:
+			try:
+				profile = board.owner.profile
+				if profile.role != Profile.Role.TEACHER:
+					raise PermissionDenied("Solo los docentes pueden editar la fecha límite del tablero.")
+			except Profile.DoesNotExist:
+				raise PermissionDenied("Solo los docentes pueden editar la fecha límite del tablero.")
 		serializer.save()
 
 	def perform_destroy(self, instance):
@@ -139,20 +184,45 @@ class BoardViewSet(viewsets.ModelViewSet):
 	@decorators.action(detail=True, methods=["post"], url_path="members", permission_classes=[IsAuthenticated])
 	def manage_members(self, request, pk=None):
 		"""
-		Agregar o quitar miembro: payload { \"user_id\": int, \"action\": \"add\"|\"remove\" }
+		Agregar o quitar miembro: payload { \"user_id\": int, \"id_number\": str, \"username\": str, \"action\": \"add\"|\"remove\" }
+		Puede buscar por user_id, id_number o username
 		"""
 		board = self.get_object()
 		if board.owner != request.user and not request.user.is_staff:
 			raise PermissionDenied("Sólo el propietario puede gestionar miembros.")
 		user_id = request.data.get("user_id")
+		id_number = request.data.get("id_number")
+		username = request.data.get("username")
 		action = request.data.get("action")
-		if not user_id or action not in ("add", "remove"):
-			raise ValidationError({"detail": "user_id y action son requeridos"})
-		try:
-			member = User.objects.get(id=user_id)
-		except User.DoesNotExist:
-			raise ValidationError({"detail": "Usuario no encontrado"})
+		
+		if action not in ("add", "remove"):
+			raise ValidationError({"detail": "action debe ser 'add' o 'remove'"})
+		
+		# Buscar usuario por user_id, id_number o username
+		member = None
+		if user_id:
+			try:
+				member = User.objects.get(id=user_id)
+			except User.DoesNotExist:
+				raise ValidationError({"detail": "Usuario no encontrado con ese ID"})
+		elif id_number:
+			try:
+				profile = Profile.objects.get(id_number=id_number)
+				member = profile.user
+			except Profile.DoesNotExist:
+				raise ValidationError({"detail": f"Usuario no encontrado con ID {id_number}"})
+		elif username:
+			try:
+				member = User.objects.get(username=username)
+			except User.DoesNotExist:
+				raise ValidationError({"detail": f"Usuario no encontrado con username '{username}'"})
+		else:
+			raise ValidationError({"detail": "Debes proporcionar user_id, id_number o username"})
+		
 		if action == "add":
+			# Evitar agregar al owner como miembro
+			if member == board.owner:
+				raise ValidationError({"detail": "El propietario del tablero ya es miembro automáticamente"})
 			board.members.add(member)
 			create_activity_log(board, request.user, "member_added", {"user_id": member.id, "username": member.username})
 		else:
@@ -193,11 +263,46 @@ class ListViewSet(viewsets.GenericViewSet):
 			raise PermissionDenied("No eres miembro de este tablero.")
 		return obj
 
-	@decorators.action(detail=True, methods=["get"], url_path="cards")
+	@decorators.action(detail=True, methods=["get", "post"], url_path="cards")
 	def list_cards(self, request, pk=None):
 		lst = self.get_object()
-		cards = Card.objects.filter(list=lst).order_by("position", "id")
-		return Response(CardSerializer(cards, many=True).data)
+		if request.method == "GET":
+			cards = Card.objects.filter(list=lst).order_by("position", "id")
+			return Response(CardSerializer(cards, many=True).data)
+		# POST para crear tarjeta
+		# Crear datos sin el campo 'list' ya que lo obtenemos de la lista actual
+		data = dict(request.data)
+		if 'list' in data:
+			del data['list']
+		serializer = CardSerializer(data=data)
+		if serializer.is_valid():
+			board = lst.board
+			card_due_date = serializer.validated_data.get("due_date")
+			
+			# Validar que la fecha de la tarjeta no exceda la del tablero
+			if card_due_date and board.due_date:
+				if card_due_date > board.due_date:
+					raise ValidationError({"due_date": f"La fecha límite de la tarjeta no puede ser posterior a la fecha límite del tablero ({board.due_date})"})
+			
+			# Calcular prioridad automática si no se proporciona
+			priority = serializer.validated_data.get("priority")
+			if not priority and card_due_date and board.due_date:
+				priority = calculate_auto_priority(card_due_date, board.due_date)
+			elif not priority:
+				priority = Card.Priority.MED
+			
+			card = Card.objects.create(
+				list=lst,
+				title=serializer.validated_data["title"],
+				description=serializer.validated_data.get("description", ""),
+				due_date=card_due_date,
+				priority=priority,
+				position=serializer.validated_data.get("position", 0),
+				created_by=request.user,
+			)
+			create_activity_log(lst.board, request.user, "card_created", {"card_id": card.id, "card_title": card.title, "list_id": lst.id})
+			return Response(CardSerializer(card).data, status=status.HTTP_201_CREATED)
+		return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 	def partial_update(self, request, pk=None):
 		lst = self.get_object()
@@ -262,6 +367,32 @@ class CardViewSet(viewsets.GenericViewSet):
 	def partial_update(self, request, pk=None):
 		card = self.get_object()
 		data = request.data.copy()
+		board = card.list.board
+		
+		# Validar que solo docentes puedan editar fechas
+		if "due_date" in data or "priority" in data:
+			try:
+				profile = request.user.profile
+				if profile.role != Profile.Role.TEACHER and board.owner != request.user:
+					raise PermissionDenied("Solo los docentes pueden editar fechas límite y prioridades de las tareas.")
+			except Profile.DoesNotExist:
+				if board.owner != request.user:
+					raise PermissionDenied("Solo los docentes pueden editar fechas límite y prioridades de las tareas.")
+		
+		# Validar que la fecha de la tarjeta no exceda la del tablero
+		if "due_date" in data and data.get("due_date"):
+			card_due_date = data.get("due_date")
+			if isinstance(card_due_date, str):
+				from datetime import datetime
+				card_due_date = datetime.strptime(card_due_date, "%Y-%m-%d").date()
+			
+			if board.due_date and card_due_date > board.due_date:
+				raise ValidationError({"due_date": f"La fecha límite de la tarjeta no puede ser posterior a la fecha límite del tablero ({board.due_date})"})
+			
+			# Recalcular prioridad automática si se cambia la fecha
+			if not data.get("priority") and board.due_date:
+				data["priority"] = calculate_auto_priority(card_due_date, board.due_date)
+		
 		# mover entre listas mediante list_id + position
 		old_list = card.list
 		new_list_id = data.get("list_id")
@@ -271,12 +402,12 @@ class CardViewSet(viewsets.GenericViewSet):
 			except List.DoesNotExist:
 				raise ValidationError({"detail": "La lista destino no existe"})
 			# validar membresía al tablero destino
-			board = new_list.board
-			if not (board.owner == request.user or board.members.filter(id=request.user.id).exists()):
+			new_board = new_list.board
+			if not (new_board.owner == request.user or new_board.members.filter(id=request.user.id).exists()):
 				raise PermissionDenied("No eres miembro del tablero destino.")
 			if old_list.id != new_list.id:
 				create_activity_log(
-					board,
+					new_board,
 					request.user,
 					"card_moved",
 					{"card_id": card.id, "card_title": card.title, "from_list": old_list.title, "to_list": new_list.title},
@@ -347,11 +478,6 @@ class CardsSearchView(APIView):
 			qs = qs.filter(due_date__lte=now().date() + timedelta(days=7))
 		data = CardSerializer(qs[:100], many=True).data
 		return Response(data)
-
-
-# Helper function para crear activity logs
-def create_activity_log(board, actor, action, meta=None):
-	ActivityLog.objects.create(board=board, actor=actor, action=action, meta=meta or {})
 
 
 # Endpoints para comentarios

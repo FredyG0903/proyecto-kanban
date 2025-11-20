@@ -14,6 +14,7 @@ type Board = {
   id: number
   name: string
   color: string
+  due_date: string | null
   owner: User
   members: User[]
 }
@@ -51,6 +52,7 @@ export function BoardView() {
   const [newListTitle, setNewListTitle] = useState('')
   const [showNewCardForm, setShowNewCardForm] = useState<number | null>(null)
   const [newCardTitle, setNewCardTitle] = useState('')
+  const [newCardDueDate, setNewCardDueDate] = useState('')
   const [showMembersModal, setShowMembersModal] = useState(false)
   const [inviteUsername, setInviteUsername] = useState('')
   const [searchUsers, setSearchUsers] = useState<User[]>([])
@@ -160,16 +162,39 @@ export function BoardView() {
     e.preventDefault()
     if (!newCardTitle.trim()) return
     try {
-      const { data } = await api.post<Card>(`lists/${listId}/cards/`, {
+      const payload: { title: string; position: number; due_date?: string } = {
         title: newCardTitle,
         position: cards.filter(c => c.list === listId).length,
-      })
+      }
+      if (newCardDueDate) {
+        payload.due_date = newCardDueDate
+      }
+      const { data } = await api.post<Card>(`lists/${listId}/cards/`, payload)
       setCards([...cards, data])
       setNewCardTitle('')
+      setNewCardDueDate('')
       setShowNewCardForm(null)
       await loadCards()
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error al crear tarjeta:', error)
+      const errorMessage = error?.response?.data?.detail 
+        || error?.response?.data?.title?.[0] 
+        || (typeof error?.response?.data === 'object' ? JSON.stringify(error.response.data) : null)
+        || error?.message 
+        || 'Error al crear la tarjeta'
+      alert(errorMessage)
+    }
+  }
+
+  const deleteCard = async (cardId: number) => {
+    if (!confirm('¿Estás seguro de eliminar esta tarjeta?')) return
+    try {
+      await api.delete(`cards/${cardId}/`)
+      setCards(cards.filter(c => c.id !== cardId))
+      await loadCards()
+    } catch (error) {
+      console.error('Error al eliminar tarjeta:', error)
+      alert('Error al eliminar la tarjeta')
     }
   }
 
@@ -232,13 +257,21 @@ export function BoardView() {
   const inviteMemberByUsername = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!inviteUsername.trim() || !id) return
-    // Por ahora, asumimos que el usuario ingresa un ID
-    // Idealmente deberías buscar por username primero
     try {
-      await api.post(`boards/${id}/members/`, {
-        user_id: parseInt(inviteUsername),
+      // Intentar primero como id_number (10 dígitos), luego como username
+      const payload: { id_number?: string; username?: string; action: string } = {
         action: 'add',
-      })
+      }
+      
+      // Si es solo números y tiene 10 dígitos, es un id_number
+      if (/^\d{10}$/.test(inviteUsername.trim())) {
+        payload.id_number = inviteUsername.trim()
+      } else {
+        // Si no, es un username
+        payload.username = inviteUsername.trim()
+      }
+      
+      await api.post(`boards/${id}/members/`, payload)
       await loadBoard()
       setInviteUsername('')
       setShowMembersModal(false)
@@ -342,7 +375,14 @@ export function BoardView() {
           >
             ← Volver
           </button>
-          <h1 className="text-2xl font-bold">{board.name}</h1>
+          <div>
+            <h1 className="text-2xl font-bold">{board.name}</h1>
+            {board.due_date && (
+              <p className="text-sm text-gray-400">
+                📅 Fecha límite: {new Date(board.due_date).toLocaleDateString('es-ES')}
+              </p>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-4">
           <button
@@ -472,25 +512,41 @@ export function BoardView() {
                     onDragStart={e => handleDragStart(e, card)}
                     className={`bg-gray-700 rounded p-3 border-l-4 ${getPriorityColor(
                       card.priority
-                    )} cursor-move hover:bg-gray-600 transition`}
-                    onClick={() => navigate(`/board/${id}/card/${card.id}`)}
+                    )} cursor-move hover:bg-gray-600 transition relative group`}
                   >
-                    <div className="font-medium mb-1">{card.title}</div>
-                    {card.description && (
-                      <div className="text-sm text-gray-400 mb-2 line-clamp-2">
-                        {card.description}
+                    <div 
+                      className="flex items-start justify-between gap-2"
+                      onClick={() => navigate(`/board/${id}/card/${card.id}`)}
+                    >
+                      <div className="flex-1">
+                        <div className="font-medium mb-1">{card.title}</div>
+                        {card.description && (
+                          <div className="text-sm text-gray-400 mb-2 line-clamp-2">
+                            {card.description}
+                          </div>
+                        )}
+                        {card.due_date && (
+                          <div className="text-xs text-yellow-400 flex items-center gap-1">
+                            📅 {new Date(card.due_date).toLocaleDateString('es-ES')}
+                          </div>
+                        )}
+                        {card.assignees.length > 0 && (
+                          <div className="text-xs text-gray-400 mt-2">
+                            👤 {card.assignees.map(a => a.username).join(', ')}
+                          </div>
+                        )}
                       </div>
-                    )}
-                    {card.due_date && (
-                      <div className="text-xs text-yellow-400 flex items-center gap-1">
-                        📅 {new Date(card.due_date).toLocaleDateString('es-ES')}
-                      </div>
-                    )}
-                    {card.assignees.length > 0 && (
-                      <div className="text-xs text-gray-400 mt-2">
-                        👤 {card.assignees.map(a => a.username).join(', ')}
-                      </div>
-                    )}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          deleteCard(card.id)
+                        }}
+                        className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-400 transition text-sm"
+                        title="Eliminar tarjeta"
+                      >
+                        🗑️
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -505,6 +561,17 @@ export function BoardView() {
                     value={newCardTitle}
                     onChange={e => setNewCardTitle(e.target.value)}
                     autoFocus
+                    required
+                  />
+                  <input
+                    type="date"
+                    className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Fecha límite (opcional)"
+                    value={newCardDueDate}
+                    onChange={e => setNewCardDueDate(e.target.value)}
+                    min={new Date().toISOString().split('T')[0]}
+                    max={board?.due_date ? board.due_date : undefined}
+                    title={board?.due_date ? `Debe ser antes de ${new Date(board.due_date).toLocaleDateString()}` : ''}
                   />
                   <div className="flex gap-2">
                     <button
@@ -518,6 +585,7 @@ export function BoardView() {
                       onClick={() => {
                         setShowNewCardForm(null)
                         setNewCardTitle('')
+                        setNewCardDueDate('')
                       }}
                       className="px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded text-sm"
                     >
@@ -678,10 +746,13 @@ export function BoardView() {
                 <input
                   type="text"
                   className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="ID de usuario a invitar"
+                  placeholder="ID (10 dígitos) o Usuario"
                   value={inviteUsername}
                   onChange={e => setInviteUsername(e.target.value)}
                 />
+                <p className="text-xs text-gray-400">
+                  Ingresa el ID de 10 dígitos o el nombre de usuario
+                </p>
                 <div className="flex gap-2">
                   <button
                     type="submit"

@@ -105,3 +105,6 @@ Historias de Usuario (ejemplos)
 •	Como estudiante, quiero mover tarjetas por drag & drop para reflejar el avance.
 •	Como estudiante, quiero filtrar tarjetas por mis asignaciones y próximas a vencer.
 •	Como docente, quiero ver un historial de actividad para evaluar participación.
+
+#Script para el entorno virtual
+. .\.venv\Scripts\Activate.ps1
