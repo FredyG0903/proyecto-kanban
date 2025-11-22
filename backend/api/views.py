@@ -9,7 +9,7 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 from django.db.models import Q
 from datetime import date, timedelta
 
-from .models import Board, List, Card, Profile, Label, Comment, ChecklistItem, ActivityLog
+from .models import Board, List, Card, Profile, Label, Comment, ChecklistItem, ActivityLog, Notification, PushSubscription
 from .serializers import (
 	BoardSerializer,
 	ListSerializer,
@@ -18,6 +18,8 @@ from .serializers import (
 	CommentSerializer,
 	ChecklistItemSerializer,
 	ActivityLogSerializer,
+	NotificationSerializer,
+	PushSubscriptionSerializer,
 )
 
 
@@ -113,6 +115,99 @@ def create_activity_log(board, actor, action, meta=None):
 	ActivityLog.objects.create(board=board, actor=actor, action=action, meta=meta or {})
 
 
+# Helper function para enviar notificaciones en tiempo real
+def send_notification_to_user(user_id, notification_data):
+	"""
+	Envía notificación en tiempo real a un usuario específico vía WebSocket
+	y también como notificación push del navegador si el usuario tiene suscripciones.
+	"""
+	from channels.layers import get_channel_layer
+	from asgiref.sync import async_to_sync
+	
+	# Enviar vía WebSocket (tiempo real en la app)
+	channel_layer = get_channel_layer()
+	if channel_layer:
+		async_to_sync(channel_layer.group_send)(
+			f"notifications_user_{user_id}",
+			{
+				'type': 'send_notification',
+				'data': notification_data
+			}
+		)
+	
+	# Enviar notificación push del navegador (si está disponible)
+	try:
+		send_push_notification_to_user(user_id, notification_data)
+	except Exception as e:
+		# Si hay algún error con push notifications, no fallar la notificación principal
+		print(f"Error al enviar push notification (no crítico): {e}")
+
+
+def send_push_notification_to_user(user_id, notification_data):
+	"""
+	Envía notificación push del navegador a todas las suscripciones del usuario.
+	"""
+	try:
+		from django.conf import settings
+		from pywebpush import webpush, WebPushException
+		import json
+	except ImportError as e:
+		# Si pywebpush no está instalado, simplemente no enviar push notifications
+		print(f"pywebpush no está disponible: {e}")
+		return
+	
+	# Verificar que las claves VAPID estén configuradas
+	if not settings.VAPID_PUBLIC_KEY or not settings.VAPID_PRIVATE_KEY:
+		return  # No se pueden enviar push sin claves VAPID
+	
+	try:
+		subscriptions = PushSubscription.objects.filter(user_id=user_id)
+		
+		for subscription in subscriptions:
+			try:
+				subscription_info = {
+					"endpoint": subscription.endpoint,
+					"keys": {
+						"p256dh": subscription.p256dh,
+						"auth": subscription.auth
+					}
+				}
+				
+				vapid_claims = {
+					"sub": f"mailto:{settings.VAPID_ADMIN_EMAIL}"
+				}
+				
+				# Preparar el payload de la notificación
+				payload = json.dumps({
+					"title": notification_data.get("title", "Nueva notificación"),
+					"body": notification_data.get("message", ""),
+					"icon": "/icon-192x192.png",  # Icono de la app (opcional)
+					"badge": "/icon-192x192.png",
+					"data": {
+						"notification_id": notification_data.get("id"),
+						"board_id": notification_data.get("board_id"),
+						"type": notification_data.get("type", "notification")
+					}
+				})
+				
+				webpush(
+					subscription_info=subscription_info,
+					data=payload,
+					vapid_private_key=settings.VAPID_PRIVATE_KEY,
+					vapid_claims=vapid_claims
+				)
+			except WebPushException as e:
+				# Si la suscripción es inválida (usuario desinstaló, etc.), eliminarla
+				if e.response and e.response.status_code in [410, 404]:
+					subscription.delete()
+				else:
+					print(f"Error al enviar push notification: {e}")
+			except Exception as e:
+				print(f"Error inesperado al enviar push notification: {e}")
+	except Exception as e:
+		print(f"Error al obtener suscripciones push: {e}")
+
+
 # Helper function para calcular prioridad automática basada en fechas
 def calculate_auto_priority(card_due_date, board_due_date):
 	"""
@@ -161,6 +256,36 @@ class BoardViewSet(viewsets.ModelViewSet):
 		board = serializer.save(owner=self.request.user)
 		board.members.add(self.request.user)
 		create_activity_log(board, self.request.user, "board_created", {"board_id": board.id, "board_name": board.name})
+		
+		# Notificar a estudiantes miembros cuando docente crea tablero
+		try:
+			owner_profile = board.owner.profile
+			if owner_profile.role == Profile.Role.TEACHER:
+				# Notificar a todos los miembros estudiantes
+				for member in board.members.all():
+					try:
+						member_profile = member.profile
+						if member_profile.role == Profile.Role.STUDENT:
+							notification = Notification.objects.create(
+								recipient=member,
+								board=board,
+								notification_type='board_created',
+								title='Nuevo tablero creado',
+								message=f"{board.owner.username} creó el tablero '{board.name}'",
+								data={'board_id': board.id, 'board_name': board.name}
+							)
+							send_notification_to_user(member.id, {
+								'id': notification.id,
+								'type': 'board_created',
+								'title': notification.title,
+								'message': notification.message,
+								'board_id': board.id,
+								'created_at': notification.created_at.isoformat()
+							})
+					except Profile.DoesNotExist:
+						continue
+		except Profile.DoesNotExist:
+			pass
 
 	def perform_update(self, serializer):
 		board = self.get_object()
@@ -225,6 +350,29 @@ class BoardViewSet(viewsets.ModelViewSet):
 				raise ValidationError({"detail": "El propietario del tablero ya es miembro automáticamente"})
 			board.members.add(member)
 			create_activity_log(board, request.user, "member_added", {"user_id": member.id, "username": member.username})
+			
+			# Notificar al estudiante invitado
+			try:
+				member_profile = member.profile
+				if member_profile.role == Profile.Role.STUDENT:
+					notification = Notification.objects.create(
+						recipient=member,
+						board=board,
+						notification_type='member_invited',
+						title='Invitación a tablero',
+						message=f"{request.user.username} te invitó al tablero '{board.name}'",
+						data={'board_id': board.id, 'board_name': board.name, 'inviter_username': request.user.username}
+					)
+					send_notification_to_user(member.id, {
+						'id': notification.id,
+						'type': 'member_invited',
+						'title': notification.title,
+						'message': notification.message,
+						'board_id': board.id,
+						'created_at': notification.created_at.isoformat()
+					})
+			except Profile.DoesNotExist:
+				pass
 		else:
 			board.members.remove(member)
 			create_activity_log(board, request.user, "member_removed", {"user_id": member.id, "username": member.username})
@@ -357,6 +505,37 @@ class CardViewSet(viewsets.GenericViewSet):
 				created_by=request.user,
 			)
 			create_activity_log(board, request.user, "card_created", {"card_id": card.id, "card_title": card.title, "list_id": lst.id})
+			
+			# Notificar a estudiantes cuando docente crea tarjeta
+			try:
+				creator_profile = request.user.profile
+				if creator_profile.role == Profile.Role.TEACHER:
+					for member in board.members.all():
+						try:
+							member_profile = member.profile
+							if member_profile.role == Profile.Role.STUDENT:
+								notification = Notification.objects.create(
+									recipient=member,
+									board=board,
+									notification_type='card_created',
+									title='Nueva tarea creada',
+									message=f"{request.user.username} creó la tarea '{card.title}' en el tablero '{board.name}'",
+									data={'board_id': board.id, 'card_id': card.id, 'card_title': card.title, 'list_id': lst.id}
+								)
+								send_notification_to_user(member.id, {
+									'id': notification.id,
+									'type': 'card_created',
+									'title': notification.title,
+									'message': notification.message,
+									'board_id': board.id,
+									'card_id': card.id,
+									'created_at': notification.created_at.isoformat()
+								})
+						except Profile.DoesNotExist:
+							continue
+			except Profile.DoesNotExist:
+				pass
+			
 			return Response(CardSerializer(card).data, status=status.HTTP_201_CREATED)
 		return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -365,9 +544,15 @@ class CardViewSet(viewsets.GenericViewSet):
 		return Response(self.get_serializer(card).data)
 
 	def partial_update(self, request, pk=None):
-		card = self.get_object()
-		data = request.data.copy()
-		board = card.list.board
+		try:
+			card = self.get_object()
+			data = request.data.copy()
+			board = card.list.board
+		except Exception as e:
+			import traceback
+			print(f"Error en get_object o data copy: {e}")
+			traceback.print_exc()
+			raise
 		
 		# Validar que solo docentes puedan editar fechas
 		if "due_date" in data or "priority" in data:
@@ -397,10 +582,17 @@ class CardViewSet(viewsets.GenericViewSet):
 		old_list = card.list
 		new_list_id = data.get("list_id")
 		if new_list_id is not None:
+			# Convertir a entero si viene como string
+			try:
+				new_list_id = int(new_list_id)
+			except (TypeError, ValueError):
+				raise ValidationError({"detail": "list_id debe ser un número válido"})
+			
 			try:
 				new_list = List.objects.select_related("board").get(id=new_list_id)
 			except List.DoesNotExist:
 				raise ValidationError({"detail": "La lista destino no existe"})
+			
 			# validar membresía al tablero destino
 			new_board = new_list.board
 			if not (new_board.owner == request.user or new_board.members.filter(id=request.user.id).exists()):
@@ -412,17 +604,69 @@ class CardViewSet(viewsets.GenericViewSet):
 					"card_moved",
 					{"card_id": card.id, "card_title": card.title, "from_list": old_list.title, "to_list": new_list.title},
 				)
+				
+				# Notificar a docente cuando estudiante mueve tarjeta
+				try:
+					actor_profile = request.user.profile
+					owner_profile = new_board.owner.profile
+					if actor_profile.role == Profile.Role.STUDENT and owner_profile.role == Profile.Role.TEACHER:
+						notification = Notification.objects.create(
+							recipient=new_board.owner,
+							board=new_board,
+							notification_type='card_moved',
+							title='Tarjeta movida',
+							message=f"{request.user.username} movió '{card.title}' de '{old_list.title}' a '{new_list.title}'",
+							data={
+								'card_id': card.id,
+								'card_title': card.title,
+								'from_list': old_list.title,
+								'to_list': new_list.title,
+								'actor_username': request.user.username
+							}
+						)
+						send_notification_to_user(new_board.owner.id, {
+							'id': notification.id,
+							'type': 'card_moved',
+							'title': notification.title,
+							'message': notification.message,
+							'board_id': new_board.id,
+							'card_id': card.id,
+							'created_at': notification.created_at.isoformat()
+						})
+				except Profile.DoesNotExist:
+					pass
+				
 			card.list = new_list
 		if "position" in data:
 			try:
 				card.position = int(data.get("position"))
 			except (TypeError, ValueError):
 				raise ValidationError({"detail": "position debe ser numérico"})
-		serializer = self.get_serializer(card, data=data, partial=True)
-		if serializer.is_valid():
-			serializer.save()
+		
+		# Guardar los cambios manuales (list y position)
+		try:
+			card.save()
+		except Exception as e:
+			import traceback
+			print(f"Error al guardar la tarjeta: {e}")
+			traceback.print_exc()
+			raise ValidationError({"detail": f"Error al guardar la tarjeta: {str(e)}"})
+		
+		# Refrescar el objeto desde la base de datos para asegurar que tenemos los datos más recientes
+		try:
+			card.refresh_from_db()
+		except Exception as e:
+			print(f"Advertencia: No se pudo refrescar la tarjeta desde la BD: {e}")
+		
+		# Serializar y devolver la tarjeta actualizada
+		try:
+			serializer = self.get_serializer(card)
 			return Response(serializer.data)
-		return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+		except Exception as e:
+			import traceback
+			print(f"Error al serializar la tarjeta: {e}")
+			traceback.print_exc()
+			raise ValidationError({"detail": f"Error al serializar la tarjeta: {str(e)}"})
 
 	def destroy(self, request, pk=None):
 		card = self.get_object()
@@ -580,3 +824,59 @@ class ActivityLogView(APIView):
 			raise PermissionDenied("No eres miembro de este tablero.")
 		activities = ActivityLog.objects.filter(board=board).select_related("actor")[:50]
 		return Response(ActivityLogSerializer(activities, many=True).data)
+
+
+# ViewSet para notificaciones
+class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
+	serializer_class = NotificationSerializer
+	permission_classes = [IsAuthenticated]
+
+	def get_queryset(self):
+		# Solo notificaciones del usuario autenticado
+		queryset = Notification.objects.filter(recipient=self.request.user)
+		
+		# Filtro opcional: ?unread=true
+		unread = self.request.query_params.get('unread', None)
+		if unread == 'true':
+			queryset = queryset.filter(read=False)
+		
+		return queryset.order_by('-created_at')
+
+	@decorators.action(detail=True, methods=['post'])
+	def mark_read(self, request, pk=None):
+		notification = self.get_object()
+		if notification.recipient != request.user:
+			raise PermissionDenied("No puedes marcar esta notificación como leída.")
+		notification.read = True
+		notification.save()
+		return Response(NotificationSerializer(notification).data)
+
+	@decorators.action(detail=False, methods=['post'])
+	def mark_all_read(self, request):
+		Notification.objects.filter(recipient=request.user, read=False).update(read=True)
+		return Response({"message": "Todas las notificaciones han sido marcadas como leídas"})
+
+
+# ViewSet para suscripciones push
+class PushSubscriptionViewSet(viewsets.ModelViewSet):
+	serializer_class = PushSubscriptionSerializer
+	permission_classes = [IsAuthenticated]
+	
+	def get_queryset(self):
+		# Solo las suscripciones del usuario autenticado
+		return PushSubscription.objects.filter(user=self.request.user)
+	
+	def perform_create(self, serializer):
+		# Asignar automáticamente el usuario actual
+		serializer.save(user=self.request.user)
+	
+	@decorators.action(detail=False, methods=['get'])
+	def public_key(self, request):
+		"""
+		Endpoint para obtener la clave pública VAPID que el frontend necesita
+		para suscribirse a notificaciones push.
+		"""
+		from django.conf import settings
+		return Response({
+			"public_key": settings.VAPID_PUBLIC_KEY
+		})

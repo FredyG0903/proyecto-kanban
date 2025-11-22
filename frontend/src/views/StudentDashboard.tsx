@@ -4,6 +4,7 @@ import { useAuthStore } from '@/store/auth'
 import { useNavigate } from 'react-router-dom'
 import { BACKGROUND_IMAGE_URL } from '@/config/background'
 import { useThemeStore } from '@/store/theme'
+import { NotificationBell } from '@/components/NotificationBell'
 
 type Board = {
   id: number
@@ -69,6 +70,7 @@ export function StudentDashboard() {
             <p className={`font-medium ${theme === 'dark' ? 'text-sm text-green-400' : 'text-base text-green-600'}`}>Estudiante</p>
           </div>
           <div className="flex items-center gap-2">
+            <NotificationBell />
             <button
               onClick={() => setShowProfile(true)}
               className="btn-secondary text-sm"

@@ -12,6 +12,8 @@ from api.views import (
 	ChecklistItemViewSet,
 	LabelViewSet,
 	ActivityLogView,
+	NotificationViewSet,
+	PushSubscriptionViewSet,
 )
 
 router = DefaultRouter()
@@ -21,6 +23,8 @@ router.register(r"cards", CardViewSet, basename="card")
 router.register(r"comments", CommentViewSet, basename="comment")
 router.register(r"checklist", ChecklistItemViewSet, basename="checklist")
 router.register(r"labels", LabelViewSet, basename="label")
+router.register(r"notifications", NotificationViewSet, basename="notification")
+router.register(r"push-subscriptions", PushSubscriptionViewSet, basename="push-subscription")
 
 urlpatterns = [
 	path("auth/login/", TokenObtainPairView.as_view(), name="token_obtain_pair"),

@@ -1,1 +1,0 @@
-﻿module.exports = {\n  env: { browser: true, es2022: true },\n  extends: ['eslint:recommended','plugin:react/recommended','plugin:react-hooks/recommended'],\n  parserOptions: { ecmaVersion: 'latest', sourceType: 'module' },\n  settings: { react: { version: 'detect' } },\n  rules: { 'react/react-in-jsx-scope': 'off' }\n};

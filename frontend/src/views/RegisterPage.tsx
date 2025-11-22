@@ -2,16 +2,16 @@ import { useForm } from 'react-hook-form'
 import { useAuthStore } from '@/store/auth'
 import { Link, useNavigate } from 'react-router-dom'
 
-type FormData = { username: string; email?: string; password: string }
+type RegisterFormData = { username: string; email?: string; password: string; role: 'student' | 'teacher'; id_number: string }
 
 export function RegisterPage() {
-  const { register: reg, handleSubmit } = useForm<FormData>()
+  const { register: reg, handleSubmit } = useForm<RegisterFormData>()
   const doRegister = useAuthStore(s => s.register)
   const loading = useAuthStore(s => s.loading)
   const error = useAuthStore(s => s.error)
   const navigate = useNavigate()
 
-  const onSubmit = async (values: FormData) => {
+  const onSubmit = async (values: RegisterFormData) => {
     try {
       await doRegister(values)
       navigate('/login')

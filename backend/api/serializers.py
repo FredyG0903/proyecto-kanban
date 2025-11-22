@@ -1,6 +1,6 @@
 from django.contrib.auth.models import User
 from rest_framework import serializers
-from .models import Board, List, Card, Label, Comment, ChecklistItem, ActivityLog
+from .models import Board, List, Card, Label, Comment, ChecklistItem, ActivityLog, Notification, PushSubscription
 
 
 class UserSlimSerializer(serializers.ModelSerializer):
@@ -80,4 +80,20 @@ class ActivityLogSerializer(serializers.ModelSerializer):
 		model = ActivityLog
 		fields = ("id", "board", "actor", "action", "meta", "created_at")
 		read_only_fields = ("id", "actor", "created_at")
+
+
+class NotificationSerializer(serializers.ModelSerializer):
+	board = serializers.PrimaryKeyRelatedField(read_only=True)
+
+	class Meta:
+		model = Notification
+		fields = ("id", "recipient", "board", "notification_type", "title", "message", "data", "read", "created_at")
+		read_only_fields = ("id", "recipient", "created_at")
+
+
+class PushSubscriptionSerializer(serializers.ModelSerializer):
+	class Meta:
+		model = PushSubscription
+		fields = ("id", "endpoint", "p256dh", "auth", "created_at", "updated_at")
+		read_only_fields = ("id", "created_at", "updated_at")
 

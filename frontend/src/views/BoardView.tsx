@@ -66,6 +66,7 @@ export function BoardView() {
   const [filterDue, setFilterDue] = useState<string>('')
   const [draggedCard, setDraggedCard] = useState<Card | null>(null)
   const [dragOverList, setDragOverList] = useState<number | null>(null)
+  const [isMovingCard, setIsMovingCard] = useState(false)
 
   useEffect(() => {
     if (id) {
@@ -75,10 +76,10 @@ export function BoardView() {
   }, [id])
 
   useEffect(() => {
-    if (lists.length > 0) {
+    if (lists.length > 0 && !isMovingCard) {
       loadCards()
     }
-  }, [lists])
+  }, [lists, isMovingCard])
 
   const loadBoard = async () => {
     try {
@@ -200,15 +201,81 @@ export function BoardView() {
   }
 
   const moveCard = async (cardId: number, newListId: number, newPosition: number) => {
+    setIsMovingCard(true)
     try {
+      // Actualización optimista: mover la tarjeta en el estado local inmediatamente
+      const cardToMove = cards.find(c => c.id === cardId)
+      if (!cardToMove) {
+        console.error('Tarjeta no encontrada:', cardId)
+        setIsMovingCard(false)
+        return
+      }
+      
+      const oldListId = cardToMove.list
+      
+      // Remover la tarjeta de su lista actual
+      const updatedCards = cards.filter(c => c.id !== cardId)
+      // Agregar la tarjeta a la nueva lista con la nueva posición
+      const newCard = { ...cardToMove, list: newListId, position: newPosition }
+      updatedCards.push(newCard)
+      setCards(updatedCards)
+      
+      console.log('Movimiento optimista aplicado:', { cardId, oldListId, newListId, newPosition })
+      
+      // Hacer la petición al backend
       const { data } = await api.patch(`cards/${cardId}/`, {
         list_id: newListId,
         position: newPosition,
       })
-      setCards(cards.map(c => (c.id === cardId ? data : c)))
-      await loadCards()
-    } catch (error) {
+      
+      console.log('Respuesta del servidor:', data)
+      
+      // Verificar que el list_id en la respuesta sea correcto
+      if (data.list !== newListId) {
+        console.warn('El servidor devolvió un list_id diferente:', { esperado: newListId, recibido: data.list })
+      }
+      
+      // Actualizar con los datos del servidor (que incluyen el list_id correcto)
+      setCards(prevCards => {
+        // Remover la tarjeta de cualquier lista donde esté
+        const withoutMoved = prevCards.filter(c => c.id !== cardId)
+        // Agregar la tarjeta actualizada del servidor
+        const updated = [...withoutMoved, data]
+        console.log('Estado actualizado con datos del servidor. Tarjeta:', updated.find(c => c.id === cardId))
+        return updated
+      })
+    } catch (error: any) {
       console.error('Error al mover tarjeta:', error)
+      console.error('Detalles del error:', {
+        status: error?.response?.status,
+        data: error?.response?.data,
+        message: error?.message
+      })
+      
+      // Revertir el cambio optimista en caso de error recargando las tarjetas
+      await loadCards()
+      
+      // Mostrar error al usuario con el mensaje real del servidor
+      let errorMessage = 'Error al mover la tarjeta.'
+      if (error?.response?.data?.detail) {
+        if (typeof error.response.data.detail === 'string') {
+          errorMessage = error.response.data.detail
+        } else if (Array.isArray(error.response.data.detail)) {
+          errorMessage = error.response.data.detail.join(', ')
+        } else {
+          errorMessage = JSON.stringify(error.response.data.detail)
+        }
+      } else if (error?.response?.data?.list_id) {
+        errorMessage = `Error en list_id: ${JSON.stringify(error.response.data.list_id)}`
+      } else if (error?.response?.data) {
+        errorMessage = `Error: ${JSON.stringify(error.response.data)}`
+      } else if (error?.message) {
+        errorMessage = `Error: ${error.message}`
+      }
+      
+      alert(errorMessage)
+    } finally {
+      setIsMovingCard(false)
     }
   }
 

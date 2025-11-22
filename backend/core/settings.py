@@ -18,6 +18,7 @@ INSTALLED_APPS = [
 	'django.contrib.messages',
 	'django.contrib.staticfiles',
 	# Terceros
+	'channels',
 	'rest_framework',
 	'drf_spectacular',
 	'corsheaders',
@@ -54,6 +55,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'core.wsgi.application'
+ASGI_APPLICATION = 'core.asgi.application'
 
 # Base de datos (usar Postgres vía variables si están definidas, si no sqlite para dev)
 if os.getenv('POSTGRES_HOST'):
@@ -120,3 +122,20 @@ SIMPLE_JWT = {
 	'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
 	'AUTH_HEADER_TYPES': ('Bearer',),
 }
+
+# Django Channels - In-Memory (para desarrollo)
+# Para producción, cambiar a Redis:
+# 'BACKEND': 'channels_redis.core.RedisChannelLayer',
+# 'CONFIG': {"hosts": [('127.0.0.1', 6379)]},
+CHANNEL_LAYERS = {
+	'default': {
+		'BACKEND': 'channels.layers.InMemoryChannelLayer',
+	},
+}
+
+# Web Push / VAPID Configuration
+# Las claves VAPID se pueden generar con: python generate_vapid_keys.py
+# O usar variables de entorno para producción
+VAPID_PUBLIC_KEY = os.getenv('VAPID_PUBLIC_KEY', 'KmSZY8SQXTI5vOwRLe_FKheIxV7wl2sqElxnBoSchXdDmwiJFxc-UKa9nf4JWzB8kwhqhYB07-VBYr8OMSwlpw')
+VAPID_PRIVATE_KEY = os.getenv('VAPID_PRIVATE_KEY', 'MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgbLVzBuB_qqjPyG9NkOuOE3od7X7ZSO8-7HCEyy_lUCKhRANCAAQqZJljxJBdMjm87BEt78UqF4jFXvCXayoSXGcGhJyFd0ObCIkXFz5Qpr2d_glbMHyTCGqFgHTv5UFivw4xLCWn')
+VAPID_ADMIN_EMAIL = os.getenv('VAPID_ADMIN_EMAIL', 'admin@kanban-academico.com')

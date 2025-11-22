@@ -114,4 +114,41 @@ class ActivityLog(models.Model):
 	def __str__(self) -> str:
 		return f"{self.actor.username} - {self.action}"
 
+
+class Notification(models.Model):
+	recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name="notifications")
+	board = models.ForeignKey(Board, on_delete=models.CASCADE, related_name="board_notifications", null=True, blank=True)
+	notification_type = models.CharField(max_length=50)  # "board_created", "card_moved", "member_invited", "card_created"
+	title = models.CharField(max_length=200)
+	message = models.TextField()
+	data = models.JSONField(default=dict, blank=True)  # Datos adicionales (card_id, list_id, actor_username, etc.)
+	read = models.BooleanField(default=False)
+	created_at = models.DateTimeField(auto_now_add=True)
+
+	class Meta:
+		ordering = ["-created_at"]
+
+	def __str__(self) -> str:
+		return f"{self.recipient.username} - {self.title}"
+
+
+class PushSubscription(models.Model):
+	"""
+	Almacena las suscripciones push de los usuarios para enviar notificaciones
+	del sistema del navegador incluso cuando la aplicación está cerrada.
+	"""
+	user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="push_subscriptions")
+	endpoint = models.URLField(max_length=500)  # URL única del servicio push
+	p256dh = models.CharField(max_length=200)  # Clave pública del cliente
+	auth = models.CharField(max_length=100)  # Secreto de autenticación
+	created_at = models.DateTimeField(auto_now_add=True)
+	updated_at = models.DateTimeField(auto_now=True)
+
+	class Meta:
+		unique_together = [['user', 'endpoint']]  # Un usuario puede tener múltiples dispositivos
+		ordering = ["-updated_at"]
+
+	def __str__(self) -> str:
+		return f"{self.user.username} - {self.endpoint[:50]}..."
+
 # Create your models here.
