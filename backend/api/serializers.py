@@ -97,3 +97,34 @@ class PushSubscriptionSerializer(serializers.ModelSerializer):
 		fields = ("id", "endpoint", "p256dh", "auth", "created_at", "updated_at")
 		read_only_fields = ("id", "created_at", "updated_at")
 
+
+class CalendarEventSerializer(serializers.ModelSerializer):
+	"""Serializer para eventos del calendario (tarjetas con fechas límite)"""
+	board_id = serializers.SerializerMethodField()
+	board_name = serializers.SerializerMethodField()
+	list_name = serializers.SerializerMethodField()
+	assignees = UserSlimSerializer(many=True, read_only=True)
+	
+	class Meta:
+		model = Card
+		fields = (
+			"id",
+			"title",
+			"description",
+			"due_date",
+			"priority",
+			"board_id",
+			"board_name",
+			"list_name",
+			"assignees",
+		)
+	
+	def get_board_id(self, obj):
+		return obj.list.board.id
+	
+	def get_board_name(self, obj):
+		return obj.list.board.name
+	
+	def get_list_name(self, obj):
+		return obj.list.title
+

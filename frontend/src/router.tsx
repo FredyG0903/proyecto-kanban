@@ -4,6 +4,7 @@ import { TeacherDashboard } from './views/TeacherDashboard'
 import { StudentDashboard } from './views/StudentDashboard'
 import { BoardView } from './views/BoardView'
 import { CardDetailView } from './views/CardDetailView'
+import { CalendarView } from './views/CalendarView'
 import { PrivateRoute } from './components/PrivateRoute'
 
 export const router = createBrowserRouter([
@@ -38,6 +39,14 @@ export const router = createBrowserRouter([
     element: (
       <PrivateRoute>
         <CardDetailView />
+      </PrivateRoute>
+    ),
+  },
+  {
+    path: '/calendar',
+    element: (
+      <PrivateRoute>
+        <CalendarView />
       </PrivateRoute>
     ),
   },

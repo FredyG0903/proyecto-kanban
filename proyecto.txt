@@ -108,3 +108,189 @@ Historias de Usuario (ejemplos)
 
 #Script para el entorno virtual
 . .\.venv\Scripts\Activate.ps1
+#para levantar el servidor
+daphne -b 0.0.0.0 -p 8000 core.asgi:application
+
+________________________________________
+8) ESTADO ACTUAL DEL PROYECTO
+
+✅ IMPLEMENTADO COMPLETAMENTE:
+
+🔐 Autenticación & Roles
+- Registro y login con JWT (access/refresh tokens)
+- Roles: estudiante y docente
+- Redirección automática según rol
+- Rutas privadas protegidas
+- Endpoint GET /api/me/ y PATCH /api/me/ (actualizar perfil)
+- DELETE /api/me/ (eliminar cuenta)
+- Validación de ID de 10 dígitos y username
+
+📋 Tableros (Boards)
+- CRUD completo de tableros
+- Gestión de miembros (invitar/remover)
+- Fecha límite del tablero
+- Notificaciones a miembros al crear/eliminar tablero
+- Dashboard separado para docentes y estudiantes
+
+📝 Listas (Columnas)
+- CRUD completo de listas
+- Ordenamiento por posición
+- Edición de título (doble clic)
+
+🃏 Tarjetas (Cards)
+- CRUD completo de tarjetas
+- Drag & Drop entre listas
+- Campos: título, descripción, fecha límite, prioridad, responsables
+- Validación de fecha límite (no excede fecha del tablero)
+- Prioridad automática basada en fecha límite
+- Notificaciones a estudiantes al crear/eliminar tarjetas
+- Notificaciones al agregar/remover responsables
+- Notificaciones al cambiar prioridad o fecha límite
+
+👥 Responsables (Assignees)
+- Asignar/desasignar estudiantes a tarjetas
+- Visualización de responsables en tarjetas
+- Modal para gestionar asignados
+
+🔍 Búsqueda/Filtros
+- Endpoint GET /api/cards/search/ con filtros por texto, responsable, vencimiento
+- Modal de búsqueda en BoardView
+- Para estudiantes: filtros de "Mis Asignaciones", "Próximas a Vencer", "Vencidas"
+
+📊 Actividad (ActivityLog)
+- Modelo y registro de actividades implementado
+- Endpoint GET /api/boards/{id}/activity/
+- Vista de historial de actividades para docentes (modal en BoardView)
+
+🔔 Notificaciones en Tiempo Real (Extensión Opcional)
+- Django Channels + WebSockets implementado
+- Notificaciones in-app en tiempo real
+- Componente NotificationBell con dropdown
+- Notificaciones automáticas para:
+  * Creación/eliminación de tableros
+  * Invitación a tableros
+  * Creación/eliminación de tarjetas
+  * Movimiento de tarjetas
+  * Actualización de tarjetas (prioridad, fecha límite)
+  * Asignación/desasignación de responsables
+- Marcar notificaciones como leídas
+- Sonido de notificación personalizable (similar a Facebook Messenger)
+- Toggle para activar/desactivar sonido en perfil
+- Push notifications implementadas (con Redis opcional)
+
+📅 Calendario (Extensión Opcional) ✅
+- Vista de calendario mensual ✅
+- Exportación a formato .ics (compatible con Outlook, Google Calendar, etc.) ✅
+- Botón de exportación en BoardView ✅
+- Navegación desde BoardView a vista de calendario ✅
+
+👤 Gestión de Perfil
+- Editar username, email y contraseña
+- Eliminar cuenta (con eliminación en cascada de datos)
+- Modal de perfil responsive y accesible
+- Toggle de sonido de notificaciones
+
+🎨 UI/UX
+- Modo oscuro y claro (dark/light mode) con toggle
+- Sistema de temas persistente
+- Imagen de fondo personalizable
+- Efecto glassmorphism
+- Diseño responsive
+- Feedback visual de cargas y errores
+- Validaciones en formularios
+
+🔒 Permisos
+- Solo docentes pueden crear/editar/eliminar tableros, listas y tarjetas
+- Solo docentes pueden gestionar miembros y asignados
+- Estudiantes pueden ver y mover tarjetas entre listas
+- Validación de membresía en todos los endpoints
+
+📚 Documentación API
+- drf-spectacular configurado
+- Endpoints GET /api/schema/ (OpenAPI)
+- Endpoints GET /api/docs/ (Swagger)
+- Endpoints GET /api/redoc/ (ReDoc)
+
+⚠️ IMPLEMENTADO PARCIALMENTE:
+
+🏷️ Etiquetas (Labels)
+- Modelo y endpoints implementados en backend
+- No visible en UI (modal de tarjeta simplificado)
+
+💬 Comentarios
+- Modelo y endpoints implementados en backend
+- No visible en UI (modal de tarjeta simplificado)
+
+✅ Checklist
+- Modelo y endpoints implementados en backend
+- No visible en UI (modal de tarjeta simplificado)
+
+🔔 Push Notifications
+- Implementado pero con problemas técnicos con claves VAPID
+- Funciona con WebSockets como alternativa
+
+❌ NO IMPLEMENTADO:
+
+📎 Adjuntos
+- Modelo no implementado
+
+📧 Recordatorios por correo
+- No implementado (requiere Celery + Redis)
+
+☁️ Subida de archivos
+- No implementado (S3/Cloudinary)
+
+🧪 Pruebas
+- Pruebas backend (Pytest + DRF tests) - No implementado
+- Pruebas frontend (Vitest/RTL) - No implementado
+
+🔧 Calidad de Código
+- Linters Python (ruff/flake8) - No configurado
+- Formateadores (black/prettier) - No configurado
+- ErrorBoundary en frontend - No implementado
+
+🚀 Despliegue
+- Configuración para producción - No implementado
+- PostgreSQL (actualmente SQLite) - No migrado
+- Despliegue en Railway/Render/Vercel - No implementado
+
+📊 PROGRESO GENERAL:
+
+Requerimientos Funcionales: ~95% ✅
+- Autenticación: ✅ 100%
+- Tableros: ✅ 100%
+- Listas: ✅ 100%
+- Tarjetas: ✅ 90% (faltan adjuntos, algunos campos no visibles en UI)
+- Comentarios: ⚠️ 50% (backend completo, frontend no)
+- Etiquetas: ⚠️ 50% (backend completo, frontend no)
+- Checklist: ⚠️ 50% (backend completo, frontend no)
+- Búsqueda/Filtros: ✅ 95%
+- Permisos: ✅ 100%
+- UX: ✅ 95%
+- Actividad: ✅ 90% (backend completo, frontend con modal)
+- Notificaciones en tiempo real: ✅ 90%
+
+Extensiones Opcionales: ~50% ⚠️
+- ✅ Notificaciones en tiempo real: 90%
+- ✅ Calendario: 100% (vista mensual y exportación .ics completas)
+- ❌ Subida de archivos: 0%
+- ❌ Recordatorios por correo: 0%
+
+Requerimientos No Funcionales: ~40% ⚠️
+- Seguridad: ⚠️ 70% (JWT ✅, CORS ✅, rate-limit ❌)
+- Calidad: ⚠️ 20% (ESLint parcial, linters Python ❌)
+- Pruebas: ❌ 0%
+- CI: ⚠️ 30% (ci.yml existe pero no ejecuta tests reales)
+- Observabilidad: ⚠️ 40% (logs básicos ✅, sin ErrorBoundary ❌)
+- Accesibilidad: ⚠️ 50% (contraste ✅, responsive ✅, ARIA parcial ❌)
+
+NOTAS IMPORTANTES:
+- El modal de tarjeta fue simplificado (solo muestra: nombre, prioridad, fecha límite, responsables)
+- Los endpoints de comentarios, checklist y etiquetas están implementados pero no se usan en la UI actual
+- La base de datos actual es SQLite (debería migrarse a PostgreSQL para producción)
+- Redis opcional para notificaciones persistentes (configurado con Docker)
+- Sistema de temas implementado con Zustand para persistencia
+- Imagen de fondo configurable desde frontend/src/config/background.ts
+- Notificaciones en tiempo real funcionando con Django Channels y WebSockets
+- Push notifications implementadas pero con problemas técnicos (claves VAPID)
+- Sonido de notificaciones similar a Facebook Messenger, configurable por usuario

@@ -1,6 +1,10 @@
 from pathlib import Path
 import os
 from datetime import timedelta
+from dotenv import load_dotenv
+
+# Cargar variables de entorno desde .env
+load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -99,6 +103,25 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # CORS
 CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+]
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
 
 # DRF y JWT
 REST_FRAMEWORK = {
@@ -123,19 +146,36 @@ SIMPLE_JWT = {
 	'AUTH_HEADER_TYPES': ('Bearer',),
 }
 
-# Django Channels - In-Memory (para desarrollo)
-# Para producción, cambiar a Redis:
-# 'BACKEND': 'channels_redis.core.RedisChannelLayer',
-# 'CONFIG': {"hosts": [('127.0.0.1', 6379)]},
-CHANNEL_LAYERS = {
-	'default': {
-		'BACKEND': 'channels.layers.InMemoryChannelLayer',
-	},
-}
+# Django Channels - Configuración
+# Usa Redis si está disponible (más robusto, funciona entre reinicios y múltiples servidores)
+# Si Redis no está disponible, usa InMemoryChannelLayer (solo para desarrollo)
+REDIS_HOST = os.getenv('REDIS_HOST', '127.0.0.1')
+REDIS_PORT = int(os.getenv('REDIS_PORT', 6379))
+USE_REDIS = os.getenv('USE_REDIS', 'True').lower() == 'true'  # Cambiado a True por defecto
+
+if USE_REDIS:
+	# Configuración con Redis (producción/uso real)
+	CHANNEL_LAYERS = {
+		'default': {
+			'BACKEND': 'channels_redis.core.RedisChannelLayer',
+			'CONFIG': {
+				"hosts": [(REDIS_HOST, REDIS_PORT)],
+			},
+		},
+	}
+	print(f"✅ Usando Redis para Channel Layers en {REDIS_HOST}:{REDIS_PORT}")
+else:
+	# Configuración In-Memory (solo desarrollo, se pierde al reiniciar)
+	CHANNEL_LAYERS = {
+		'default': {
+			'BACKEND': 'channels.layers.InMemoryChannelLayer',
+		},
+	}
+	print("⚠️ Usando InMemoryChannelLayer (solo desarrollo). Para producción, configura Redis.")
 
 # Web Push / VAPID Configuration
 # Las claves VAPID se pueden generar con: python generate_vapid_keys.py
 # O usar variables de entorno para producción
-VAPID_PUBLIC_KEY = os.getenv('VAPID_PUBLIC_KEY', 'KmSZY8SQXTI5vOwRLe_FKheIxV7wl2sqElxnBoSchXdDmwiJFxc-UKa9nf4JWzB8kwhqhYB07-VBYr8OMSwlpw')
-VAPID_PRIVATE_KEY = os.getenv('VAPID_PRIVATE_KEY', 'MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgbLVzBuB_qqjPyG9NkOuOE3od7X7ZSO8-7HCEyy_lUCKhRANCAAQqZJljxJBdMjm87BEt78UqF4jFXvCXayoSXGcGhJyFd0ObCIkXFz5Qpr2d_glbMHyTCGqFgHTv5UFivw4xLCWn')
+VAPID_PUBLIC_KEY = os.getenv('VAPID_PUBLIC_KEY', 'BEWYTfYROeY2Afzn--YiLKeO9zjR5OJphwhp8Gs89ZtEZGYF8sUMmNoxAxy0Ds82oJM48CFZK447An79Rmd4tFM')
+VAPID_PRIVATE_KEY = os.getenv('VAPID_PRIVATE_KEY', 'MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgwUjXsq2d2RqY9tWlXUzd0k5g4FjnomkswVdIlEGs_2ShRANCAARFmE32ETnmNgH85_vmIiynjvc40eTiaYcIafBrPPWbRGRmBfLFDJjaMQMctA7PNqCTOPAhWSuOOwJ-_UZneLRT')
 VAPID_ADMIN_EMAIL = os.getenv('VAPID_ADMIN_EMAIL', 'admin@kanban-academico.com')

@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import api from '../lib/api'
 import { initializePushNotifications, isPushSupported } from '../lib/pushNotifications'
+import { playNotificationSound, isSoundEnabled } from '../lib/notificationSound'
 
 export type Notification = {
   id: number
@@ -109,6 +110,12 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
       if (state.notifications.some(n => n.id === notification.id)) {
         return state
       }
+      
+      // Reproducir sonido si la notificación no está leída y el sonido está habilitado
+      if (!notification.read && isSoundEnabled()) {
+        playNotificationSound()
+      }
+      
       return {
         notifications: [notification, ...state.notifications],
         unreadCount: notification.read ? state.unreadCount : state.unreadCount + 1

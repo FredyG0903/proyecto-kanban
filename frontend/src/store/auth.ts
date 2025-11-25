@@ -21,6 +21,8 @@ type AuthState = {
   login: (username: string, password: string) => Promise<void>
   register: (payload: { username: string; email?: string; password: string; role: 'student' | 'teacher'; id_number: string }) => Promise<void>
   fetchMe: () => Promise<void>
+  updateProfile: (payload: { username?: string; email?: string; password?: string }) => Promise<void>
+  deleteAccount: () => Promise<void>
   logout: () => void
   initialize: () => Promise<void>
 }
@@ -69,6 +71,39 @@ export const useAuthStore = create<AuthState>()(
           set({ user: data })
         } catch {
           set({ user: null, accessToken: null, refreshToken: null })
+        }
+      },
+
+      async updateProfile(payload) {
+        try {
+          set({ loading: true, error: null })
+          const { data } = await api.patch<User>('me/', payload)
+          set({ user: data })
+        } catch (e: any) {
+          const msg = e?.response?.data?.username?.[0] || 
+                     e?.response?.data?.email?.[0] || 
+                     e?.response?.data?.password?.[0] ||
+                     e?.response?.data?.detail ||
+                     'Error al actualizar el perfil'
+          set({ error: msg })
+          throw e
+        } finally {
+          set({ loading: false })
+        }
+      },
+
+      async deleteAccount() {
+        try {
+          set({ loading: true, error: null })
+          await api.delete('me/')
+          // Después de eliminar la cuenta, hacer logout
+          set({ accessToken: null, refreshToken: null, user: null })
+        } catch (e: any) {
+          const msg = e?.response?.data?.detail || 'Error al eliminar la cuenta'
+          set({ error: msg })
+          throw e
+        } finally {
+          set({ loading: false })
         }
       },
 

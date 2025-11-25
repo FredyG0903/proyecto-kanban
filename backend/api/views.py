@@ -20,6 +20,7 @@ from .serializers import (
 	ActivityLogSerializer,
 	NotificationSerializer,
 	PushSubscriptionSerializer,
+	CalendarEventSerializer,
 )
 
 
@@ -70,11 +71,12 @@ class RegisterView(APIView):
 class MeSerializer(serializers.ModelSerializer):
 	role = serializers.SerializerMethodField()
 	id_number = serializers.SerializerMethodField()
+	password = serializers.CharField(write_only=True, required=False, min_length=8, allow_blank=True)
 
 	class Meta:
 		model = User
-		fields = ("id", "username", "email", "is_staff", "is_superuser", "role", "id_number")
-		read_only_fields = ("id", "username", "is_staff", "is_superuser", "role", "id_number")
+		fields = ("id", "username", "email", "is_staff", "is_superuser", "role", "id_number", "password")
+		read_only_fields = ("id", "is_staff", "is_superuser", "role", "id_number")
 
 	def get_role(self, obj):
 		# Obtener el rol del perfil, si no existe retornar None
@@ -90,6 +92,35 @@ class MeSerializer(serializers.ModelSerializer):
 		except Profile.DoesNotExist:
 			return None
 
+	def validate_username(self, value):
+		# Validar que el username no esté en uso por otro usuario
+		user = self.instance
+		if User.objects.filter(username=value).exclude(id=user.id).exists():
+			raise serializers.ValidationError("Este nombre de usuario ya está en uso.")
+		return value
+
+	def validate_email(self, value):
+		# Validar que el email no esté en uso por otro usuario
+		user = self.instance
+		if User.objects.filter(email=value).exclude(id=user.id).exists():
+			raise serializers.ValidationError("Este correo electrónico ya está en uso.")
+		return value
+
+	def update(self, instance, validated_data):
+		# Manejar cambio de contraseña por separado
+		password = validated_data.pop('password', None)
+		
+		# Actualizar campos del usuario
+		for attr, value in validated_data.items():
+			setattr(instance, attr, value)
+		
+		# Si se proporcionó una nueva contraseña, actualizarla
+		if password:
+			instance.set_password(password)
+		
+		instance.save()
+		return instance
+
 
 class MeView(APIView):
 	permission_classes = [IsAuthenticated]
@@ -103,6 +134,27 @@ class MeView(APIView):
 			serializer.save()
 			return Response(serializer.data)
 		return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+	def delete(self, request):
+		"""
+		Elimina la cuenta del usuario autenticado.
+		Esto eliminará todos los datos relacionados (tableros, tareas, notificaciones, etc.)
+		debido a las relaciones CASCADE en los modelos.
+		"""
+		user = request.user
+		username = user.username
+		
+		print(f"🗑️ Usuario {username} (ID: {user.id}) solicitó eliminar su cuenta")
+		
+		# Eliminar el usuario (esto eliminará en cascada todos los datos relacionados)
+		user.delete()
+		
+		print(f"✅ Cuenta de usuario {username} eliminada exitosamente")
+		
+		return Response(
+			{"message": "Cuenta eliminada exitosamente"},
+			status=status.HTTP_200_OK
+		)
 
 
 class IsBoardMember(permissions.BasePermission):
@@ -136,11 +188,17 @@ def send_notification_to_user(user_id, notification_data):
 		)
 	
 	# Enviar notificación push del navegador (si está disponible)
+	# IMPORTANTE: Las notificaciones push se mostrarán incluso si la página está en primer plano
+	# Esto es necesario para que el usuario vea las notificaciones cuando está en modales
 	try:
+		print(f"📤 Intentando enviar push notification a usuario {user_id}")
 		send_push_notification_to_user(user_id, notification_data)
+		print(f"✅ Push notification procesada para usuario {user_id}")
 	except Exception as e:
 		# Si hay algún error con push notifications, no fallar la notificación principal
-		print(f"Error al enviar push notification (no crítico): {e}")
+		print(f"⚠️ Error al enviar push notification (no crítico): {e}")
+		import traceback
+		print(f"   Traceback: {traceback.format_exc()}")
 
 
 def send_push_notification_to_user(user_id, notification_data):
@@ -153,18 +211,29 @@ def send_push_notification_to_user(user_id, notification_data):
 		import json
 	except ImportError as e:
 		# Si pywebpush no está instalado, simplemente no enviar push notifications
-		print(f"pywebpush no está disponible: {e}")
+		print(f"❌ pywebpush no está disponible: {e}")
 		return
 	
 	# Verificar que las claves VAPID estén configuradas
 	if not settings.VAPID_PUBLIC_KEY or not settings.VAPID_PRIVATE_KEY:
+		print(f"⚠️ Claves VAPID no configuradas. No se pueden enviar push notifications.")
+		print(f"   VAPID_PUBLIC_KEY: {'✅' if settings.VAPID_PUBLIC_KEY else '❌'}")
+		print(f"   VAPID_PRIVATE_KEY: {'✅' if settings.VAPID_PRIVATE_KEY else '❌'}")
 		return  # No se pueden enviar push sin claves VAPID
 	
 	try:
 		subscriptions = PushSubscription.objects.filter(user_id=user_id)
+		subscription_count = subscriptions.count()
+		print(f"🔄 Buscando suscripciones push para usuario {user_id}: {subscription_count} encontradas")
+		
+		if subscription_count == 0:
+			print(f"⚠️ Usuario {user_id} no tiene suscripciones push registradas")
+			return
 		
 		for subscription in subscriptions:
 			try:
+				print(f"🔄 Enviando push notification a suscripción {subscription.id} (endpoint: {subscription.endpoint[:50]}...)")
+				
 				subscription_info = {
 					"endpoint": subscription.endpoint,
 					"keys": {
@@ -178,34 +247,58 @@ def send_push_notification_to_user(user_id, notification_data):
 				}
 				
 				# Preparar el payload de la notificación
+				# Nota: El payload debe ser un string JSON válido
+				# IMPORTANTE: Las notificaciones push se mostrarán incluso si la página está en primer plano
 				payload = json.dumps({
 					"title": notification_data.get("title", "Nueva notificación"),
 					"body": notification_data.get("message", ""),
+					"message": notification_data.get("message", ""),  # Compatibilidad con diferentes formatos
 					"icon": "/icon-192x192.png",  # Icono de la app (opcional)
 					"badge": "/icon-192x192.png",
 					"data": {
 						"notification_id": notification_data.get("id"),
+						"id": notification_data.get("id"),  # Compatibilidad adicional
 						"board_id": notification_data.get("board_id"),
+						"card_id": notification_data.get("card_id"),
 						"type": notification_data.get("type", "notification")
-					}
+					},
+					# Forzar mostrar la notificación incluso si la página está visible
+					"requireInteraction": False,
+					"renotify": True
 				})
+				
+				print(f"📤 Payload: {payload[:100]}...")
+				print(f"📤 Enviando push notification (se mostrará incluso si la página está en primer plano)")
 				
 				webpush(
 					subscription_info=subscription_info,
 					data=payload,
 					vapid_private_key=settings.VAPID_PRIVATE_KEY,
-					vapid_claims=vapid_claims
+					vapid_claims=vapid_claims,
+					# Opciones adicionales para asegurar que se envíe
+					ttl=86400,  # Tiempo de vida de 24 horas
 				)
+				
+				print(f"✅ Push notification enviada exitosamente a suscripción {subscription.id}")
 			except WebPushException as e:
 				# Si la suscripción es inválida (usuario desinstaló, etc.), eliminarla
-				if e.response and e.response.status_code in [410, 404]:
-					subscription.delete()
+				print(f"❌ WebPushException al enviar push notification: {e}")
+				if hasattr(e, 'response') and e.response:
+					print(f"   Status code: {e.response.status_code}")
+					if e.response.status_code in [410, 404]:
+						print(f"   ⚠️ Suscripción inválida, eliminándola...")
+						subscription.delete()
+						print(f"   ✅ Suscripción eliminada")
 				else:
-					print(f"Error al enviar push notification: {e}")
+					print(f"   No se pudo obtener información de la respuesta")
 			except Exception as e:
-				print(f"Error inesperado al enviar push notification: {e}")
+				print(f"❌ Error inesperado al enviar push notification: {e}")
+				import traceback
+				print(f"   Traceback: {traceback.format_exc()}")
 	except Exception as e:
-		print(f"Error al obtener suscripciones push: {e}")
+		print(f"❌ Error al obtener suscripciones push: {e}")
+		import traceback
+		print(f"   Traceback: {traceback.format_exc()}")
 
 
 # Helper function para calcular prioridad automática basada en fechas
@@ -304,6 +397,43 @@ class BoardViewSet(viewsets.ModelViewSet):
 	def perform_destroy(self, instance):
 		if instance.owner != self.request.user:
 			raise PermissionDenied("Sólo el propietario puede eliminar el tablero.")
+		
+		# Guardar información del tablero antes de eliminarlo para las notificaciones
+		board_name = instance.name
+		board_id = instance.id
+		members = list(instance.members.all())
+		
+		# Crear log de actividad antes de eliminar
+		create_activity_log(instance, self.request.user, "board_deleted", {
+			"board_id": board_id,
+			"board_name": board_name
+		})
+		
+		# Notificar a los miembros antes de eliminar el tablero
+		for member in members:
+			if member != self.request.user:  # No notificar al owner que está eliminando
+				try:
+					notification = Notification.objects.create(
+						recipient=member,
+						board=None,  # El tablero ya no existe
+						notification_type='board_deleted',
+						title='Tablero eliminado',
+						message=f"{self.request.user.username} eliminó el tablero '{board_name}'",
+						data={'board_id': board_id, 'board_name': board_name, 'deleted_by': self.request.user.username}
+					)
+					send_notification_to_user(member.id, {
+						'id': notification.id,
+						'type': 'board_deleted',
+						'title': notification.title,
+						'message': notification.message,
+						'board_id': None,  # El tablero ya no existe
+						'created_at': notification.created_at.isoformat()
+					})
+				except Exception as e:
+					# Si hay error al notificar, continuar con la eliminación
+					print(f"Error al notificar eliminación de tablero a {member.username}: {e}")
+		
+		# Eliminar el tablero (esto eliminará en cascada las listas, tarjetas, etc.)
 		instance.delete()
 
 	@decorators.action(detail=True, methods=["post"], url_path="members", permission_classes=[IsAuthenticated])
@@ -449,6 +579,60 @@ class ListViewSet(viewsets.GenericViewSet):
 				created_by=request.user,
 			)
 			create_activity_log(lst.board, request.user, "card_created", {"card_id": card.id, "card_title": card.title, "list_id": lst.id})
+			
+			# Notificar a todos los estudiantes miembros del tablero cuando se crea una tarjeta
+			try:
+				board = lst.board
+				# Obtener todos los estudiantes miembros del tablero (excluyendo al creador)
+				students_to_notify = []
+				
+				# Obtener estudiantes de los miembros del tablero
+				for member in board.members.all():
+					if member.id != request.user.id:  # No notificar al creador
+						try:
+							member_profile = member.profile
+							if member_profile.role == Profile.Role.STUDENT:
+								students_to_notify.append(member)
+						except Profile.DoesNotExist:
+							continue
+				
+				# También incluir al owner si es estudiante (aunque normalmente es docente)
+				if board.owner.id != request.user.id:
+					try:
+						if board.owner.profile.role == Profile.Role.STUDENT:
+							if board.owner not in students_to_notify:
+								students_to_notify.append(board.owner)
+					except Profile.DoesNotExist:
+						pass
+				
+				# Notificar a cada estudiante
+				for student in students_to_notify:
+					try:
+						notification = Notification.objects.create(
+							recipient=student,
+							board=board,
+							notification_type='card_created',
+							title='Nueva tarea creada',
+							message=f"{request.user.username} creó la tarea '{card.title}' en el tablero '{board.name}'",
+							data={'board_id': board.id, 'card_id': card.id, 'card_title': card.title, 'list_id': lst.id}
+						)
+						send_notification_to_user(student.id, {
+							'id': notification.id,
+							'type': 'card_created',
+							'title': notification.title,
+							'message': notification.message,
+							'board_id': board.id,
+							'card_id': card.id,
+							'created_at': notification.created_at.isoformat()
+						})
+					except Exception as e:
+						print(f"Error al notificar a estudiante {student.id}: {e}")
+						continue
+			except Exception as e:
+				print(f"Error al procesar notificaciones de tarjeta creada: {e}")
+				import traceback
+				traceback.print_exc()
+			
 			return Response(CardSerializer(card).data, status=status.HTTP_201_CREATED)
 		return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -506,35 +690,57 @@ class CardViewSet(viewsets.GenericViewSet):
 			)
 			create_activity_log(board, request.user, "card_created", {"card_id": card.id, "card_title": card.title, "list_id": lst.id})
 			
-			# Notificar a estudiantes cuando docente crea tarjeta
+			# Notificar a todos los estudiantes miembros del tablero cuando se crea una tarjeta
 			try:
-				creator_profile = request.user.profile
-				if creator_profile.role == Profile.Role.TEACHER:
-					for member in board.members.all():
+				# Obtener todos los estudiantes miembros del tablero (excluyendo al creador)
+				students_to_notify = []
+				
+				# Obtener estudiantes de los miembros del tablero
+				for member in board.members.all():
+					if member.id != request.user.id:  # No notificar al creador
 						try:
 							member_profile = member.profile
 							if member_profile.role == Profile.Role.STUDENT:
-								notification = Notification.objects.create(
-									recipient=member,
-									board=board,
-									notification_type='card_created',
-									title='Nueva tarea creada',
-									message=f"{request.user.username} creó la tarea '{card.title}' en el tablero '{board.name}'",
-									data={'board_id': board.id, 'card_id': card.id, 'card_title': card.title, 'list_id': lst.id}
-								)
-								send_notification_to_user(member.id, {
-									'id': notification.id,
-									'type': 'card_created',
-									'title': notification.title,
-									'message': notification.message,
-									'board_id': board.id,
-									'card_id': card.id,
-									'created_at': notification.created_at.isoformat()
-								})
+								students_to_notify.append(member)
 						except Profile.DoesNotExist:
 							continue
-			except Profile.DoesNotExist:
-				pass
+				
+				# También incluir al owner si es estudiante (aunque normalmente es docente)
+				if board.owner.id != request.user.id:
+					try:
+						if board.owner.profile.role == Profile.Role.STUDENT:
+							if board.owner not in students_to_notify:
+								students_to_notify.append(board.owner)
+					except Profile.DoesNotExist:
+						pass
+				
+				# Notificar a cada estudiante
+				for student in students_to_notify:
+					try:
+						notification = Notification.objects.create(
+							recipient=student,
+							board=board,
+							notification_type='card_created',
+							title='Nueva tarea creada',
+							message=f"{request.user.username} creó la tarea '{card.title}' en el tablero '{board.name}'",
+							data={'board_id': board.id, 'card_id': card.id, 'card_title': card.title, 'list_id': lst.id}
+						)
+						send_notification_to_user(student.id, {
+							'id': notification.id,
+							'type': 'card_created',
+							'title': notification.title,
+							'message': notification.message,
+							'board_id': board.id,
+							'card_id': card.id,
+							'created_at': notification.created_at.isoformat()
+						})
+					except Exception as e:
+						print(f"Error al notificar a estudiante {student.id}: {e}")
+						continue
+			except Exception as e:
+				print(f"Error al procesar notificaciones de tarjeta creada: {e}")
+				import traceback
+				traceback.print_exc()
 			
 			return Response(CardSerializer(card).data, status=status.HTTP_201_CREATED)
 		return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -643,7 +849,23 @@ class CardViewSet(viewsets.GenericViewSet):
 			except (TypeError, ValueError):
 				raise ValidationError({"detail": "position debe ser numérico"})
 		
-		# Guardar los cambios manuales (list y position)
+		# Guardar valores anteriores para detectar cambios
+		old_title = card.title
+		old_due_date = card.due_date
+		old_priority = card.priority
+		old_description = card.description
+		
+		# Aplicar cambios a los campos editables
+		if "title" in data:
+			card.title = data.get("title")
+		if "description" in data:
+			card.description = data.get("description", "")
+		if "due_date" in data:
+			card.due_date = data.get("due_date") if data.get("due_date") else None
+		if "priority" in data:
+			card.priority = data.get("priority")
+		
+		# Guardar los cambios manuales (list, position y otros campos)
 		try:
 			card.save()
 		except Exception as e:
@@ -657,6 +879,95 @@ class CardViewSet(viewsets.GenericViewSet):
 			card.refresh_from_db()
 		except Exception as e:
 			print(f"Advertencia: No se pudo refrescar la tarjeta desde la BD: {e}")
+		
+		# Detectar cambios y notificar a estudiantes miembros del tablero
+		changes_detected = []
+		notification_message_parts = []
+		
+		if "title" in data and old_title != card.title:
+			changes_detected.append("título")
+			notification_message_parts.append(f"título cambió a '{card.title}'")
+		
+		if "due_date" in data and old_due_date != card.due_date:
+			changes_detected.append("fecha límite")
+			if card.due_date:
+				from datetime import datetime
+				due_date_str = card.due_date.strftime("%d/%m/%Y") if isinstance(card.due_date, date) else card.due_date
+				notification_message_parts.append(f"fecha límite cambió a {due_date_str}")
+			else:
+				notification_message_parts.append("fecha límite fue eliminada")
+		
+		if "priority" in data and old_priority != card.priority:
+			changes_detected.append("prioridad")
+			priority_names = {"high": "Alta", "med": "Media", "low": "Baja"}
+			new_priority_name = priority_names.get(card.priority, card.priority)
+			notification_message_parts.append(f"prioridad cambió a {new_priority_name}")
+		
+		if "description" in data and old_description != card.description:
+			changes_detected.append("descripción")
+			notification_message_parts.append("descripción fue actualizada")
+		
+		# Notificar a todos los estudiantes miembros del tablero si hubo cambios
+		if changes_detected and notification_message_parts:
+			try:
+				# Obtener todos los estudiantes miembros del tablero (excluyendo al que hizo el cambio)
+				students_to_notify = []
+				
+				# Obtener estudiantes de los miembros del tablero
+				for member in board.members.all():
+					if member.id != request.user.id:
+						try:
+							if member.profile.role == Profile.Role.STUDENT:
+								students_to_notify.append(member)
+						except Profile.DoesNotExist:
+							pass
+				
+				# También incluir al owner si es estudiante (aunque normalmente es docente)
+				if board.owner.id != request.user.id:
+					try:
+						if board.owner.profile.role == Profile.Role.STUDENT:
+							if board.owner not in students_to_notify:
+								students_to_notify.append(board.owner)
+					except Profile.DoesNotExist:
+						pass
+				
+				# Crear mensaje de notificación
+				changes_text = ", ".join(notification_message_parts)
+				notification_title = "Tarea actualizada"
+				notification_message = f"{request.user.username} actualizó la tarea '{card.title}': {changes_text}"
+				
+				# Notificar a cada estudiante
+				for student in students_to_notify:
+					try:
+						notification = Notification.objects.create(
+							recipient=student,
+							board=board,
+							notification_type='card_updated',
+							title=notification_title,
+							message=notification_message,
+							data={
+								'board_id': board.id,
+								'card_id': card.id,
+								'card_title': card.title,
+								'changes': changes_detected,
+								'actor_username': request.user.username
+							}
+						)
+						send_notification_to_user(student.id, {
+							'id': notification.id,
+							'type': 'card_updated',
+							'title': notification.title,
+							'message': notification.message,
+							'board_id': board.id,
+							'card_id': card.id,
+							'created_at': notification.created_at.isoformat()
+						})
+					except Exception as e:
+						print(f"Error al notificar a estudiante {student.username}: {e}")
+			except Exception as e:
+				import traceback
+				print(f"Error al notificar cambios en tarjeta: {e}")
+				traceback.print_exc()
 		
 		# Serializar y devolver la tarjeta actualizada
 		try:
@@ -675,8 +986,60 @@ class CardViewSet(viewsets.GenericViewSet):
 			raise PermissionDenied("Sólo el propietario del tablero o creador pueden eliminar la tarjeta.")
 		board = card.list.board
 		card_title = card.title
+		card_id = card.id
+		
+		# Guardar información antes de eliminar para las notificaciones
+		students_to_notify = []
+		for member in board.members.all():
+			if member.id != request.user.id:  # No notificar al que elimina
+				try:
+					member_profile = member.profile
+					if member_profile.role == Profile.Role.STUDENT:
+						students_to_notify.append(member)
+				except Profile.DoesNotExist:
+					continue
+		
+		# También incluir al owner si es estudiante
+		if board.owner.id != request.user.id:
+			try:
+				if board.owner.profile.role == Profile.Role.STUDENT:
+					if board.owner not in students_to_notify:
+						students_to_notify.append(board.owner)
+			except Profile.DoesNotExist:
+				pass
+		
+		# Eliminar la tarjeta
 		card.delete()
 		create_activity_log(board, request.user, "card_deleted", {"card_title": card_title})
+		
+		# Notificar a todos los estudiantes miembros del tablero cuando se elimina una tarjeta
+		try:
+			for student in students_to_notify:
+				try:
+					notification = Notification.objects.create(
+						recipient=student,
+						board=board,
+						notification_type='card_deleted',
+						title='Tarea eliminada',
+						message=f"{request.user.username} eliminó la tarea '{card_title}' del tablero '{board.name}'",
+						data={'board_id': board.id, 'card_title': card_title}
+					)
+					send_notification_to_user(student.id, {
+						'id': notification.id,
+						'type': 'card_deleted',
+						'title': notification.title,
+						'message': notification.message,
+						'board_id': board.id,
+						'created_at': notification.created_at.isoformat()
+					})
+				except Exception as e:
+					print(f"Error al notificar a estudiante {student.id}: {e}")
+					continue
+		except Exception as e:
+			print(f"Error al procesar notificaciones de tarjeta eliminada: {e}")
+			import traceback
+			traceback.print_exc()
+		
 		return Response(status=status.HTTP_204_NO_CONTENT)
 
 	@decorators.action(detail=True, methods=["post"], url_path="assignees")
@@ -693,10 +1056,85 @@ class CardViewSet(viewsets.GenericViewSet):
 		board = card.list.board
 		if not (board.owner == request.user or board.members.filter(id=request.user.id).exists()):
 			raise PermissionDenied("No eres miembro de este tablero.")
+		
+		# Guardar el estado anterior para saber si el usuario ya estaba asignado
+		was_assigned = card.assignees.filter(id=member.id).exists()
+		
 		if action == "add":
 			card.assignees.add(member)
 		else:
 			card.assignees.remove(member)
+		
+		# Enviar notificación al estudiante afectado
+		# Solo notificar si el cambio realmente ocurrió (no estaba asignado y se agregó, o estaba asignado y se quitó)
+		should_notify = False
+		if action == "add" and not was_assigned:
+			should_notify = True
+		elif action == "remove" and was_assigned:
+			should_notify = True
+		
+		if should_notify:
+			try:
+				member_profile = member.profile
+				# Notificar al estudiante afectado (también podría notificar a cualquier usuario, pero por ahora solo estudiantes)
+				if member_profile.role == Profile.Role.STUDENT:
+					if action == "add":
+						notification = Notification.objects.create(
+							recipient=member,
+							board=board,
+							notification_type='card_assigned',
+							title='Tarea asignada',
+							message=f"{request.user.username} te asignó la tarea '{card.title}' en el tablero '{board.name}'",
+							data={
+								'board_id': board.id,
+								'card_id': card.id,
+								'card_title': card.title,
+								'list_id': card.list.id,
+								'list_title': card.list.title,
+								'actor_username': request.user.username
+							}
+						)
+						send_notification_to_user(member.id, {
+							'id': notification.id,
+							'type': 'card_assigned',
+							'title': notification.title,
+							'message': notification.message,
+							'board_id': board.id,
+							'card_id': card.id,
+							'created_at': notification.created_at.isoformat()
+						})
+					else:  # remove
+						notification = Notification.objects.create(
+							recipient=member,
+							board=board,
+							notification_type='card_unassigned',
+							title='Tarea desasignada',
+							message=f"{request.user.username} te quitó la asignación de la tarea '{card.title}' en el tablero '{board.name}'",
+							data={
+								'board_id': board.id,
+								'card_id': card.id,
+								'card_title': card.title,
+								'list_id': card.list.id,
+								'list_title': card.list.title,
+								'actor_username': request.user.username
+							}
+						)
+						send_notification_to_user(member.id, {
+							'id': notification.id,
+							'type': 'card_unassigned',
+							'title': notification.title,
+							'message': notification.message,
+							'board_id': board.id,
+							'card_id': card.id,
+							'created_at': notification.created_at.isoformat()
+						})
+			except Profile.DoesNotExist:
+				pass
+			except Exception as e:
+				import traceback
+				print(f"Error al notificar cambio de asignación: {e}")
+				traceback.print_exc()
+		
 		return Response(CardSerializer(card).data)
 
 
@@ -868,7 +1306,11 @@ class PushSubscriptionViewSet(viewsets.ModelViewSet):
 	
 	def perform_create(self, serializer):
 		# Asignar automáticamente el usuario actual
-		serializer.save(user=self.request.user)
+		print(f"📥 Recibiendo suscripción push para usuario {self.request.user.id} ({self.request.user.username})")
+		print(f"   Endpoint: {serializer.validated_data.get('endpoint', 'N/A')[:50]}...")
+		subscription = serializer.save(user=self.request.user)
+		print(f"✅ Suscripción push guardada exitosamente (ID: {subscription.id})")
+		print(f"   Total de suscripciones para usuario {self.request.user.id}: {PushSubscription.objects.filter(user=self.request.user).count()}")
 	
 	@decorators.action(detail=False, methods=['get'])
 	def public_key(self, request):
@@ -880,3 +1322,143 @@ class PushSubscriptionViewSet(viewsets.ModelViewSet):
 		return Response({
 			"public_key": settings.VAPID_PUBLIC_KEY
 		})
+
+
+class CalendarView(APIView):
+	"""
+	Endpoint para obtener eventos del calendario (tarjetas con fechas límite).
+	GET /api/calendar/?board_id=1&start_date=2024-01-01&end_date=2024-12-31
+	"""
+	permission_classes = [IsAuthenticated]
+	
+	def get(self, request):
+		user = request.user
+		board_id = request.query_params.get('board_id')
+		start_date = request.query_params.get('start_date')
+		end_date = request.query_params.get('end_date')
+		
+		# Obtener tarjetas con fecha límite del usuario
+		# Usuario puede ver tarjetas de tableros donde es owner o miembro
+		cards = Card.objects.filter(
+			Q(list__board__owner=user) | Q(list__board__members=user),
+			due_date__isnull=False
+		).distinct().select_related('list', 'list__board', 'created_by').prefetch_related('assignees')
+		
+		# Filtrar por tablero si se especifica
+		if board_id:
+			try:
+				board_id_int = int(board_id)
+				cards = cards.filter(list__board_id=board_id_int)
+			except ValueError:
+				pass
+		
+		# Filtrar por rango de fechas si se especifica
+		if start_date:
+			try:
+				from datetime import datetime
+				start = datetime.strptime(start_date, '%Y-%m-%d').date()
+				cards = cards.filter(due_date__gte=start)
+			except ValueError:
+				pass
+		
+		if end_date:
+			try:
+				from datetime import datetime
+				end = datetime.strptime(end_date, '%Y-%m-%d').date()
+				cards = cards.filter(due_date__lte=end)
+			except ValueError:
+				pass
+		
+		serializer = CalendarEventSerializer(cards, many=True)
+		return Response(serializer.data)
+
+
+class CalendarExportView(APIView):
+	"""
+	Endpoint para exportar calendario a formato .ics (iCalendar).
+	GET /api/calendar/export/?board_id=1
+	"""
+	permission_classes = [IsAuthenticated]
+	
+	def get(self, request):
+		from django.http import HttpResponse
+		from datetime import datetime, timedelta
+		import uuid
+		
+		user = request.user
+		board_id = request.query_params.get('board_id')
+		
+		# Obtener tarjetas con fecha límite
+		cards = Card.objects.filter(
+			Q(list__board__owner=user) | Q(list__board__members=user),
+			due_date__isnull=False
+		).distinct().select_related('list', 'list__board', 'created_by').prefetch_related('assignees')
+		
+		# Filtrar por tablero si se especifica
+		if board_id:
+			try:
+				board_id_int = int(board_id)
+				cards = cards.filter(list__board_id=board_id_int)
+				board = Board.objects.get(id=board_id_int)
+				calendar_name = f"Kanban - {board.name}"
+			except (ValueError, Board.DoesNotExist):
+				calendar_name = "Kanban Académico"
+		else:
+			calendar_name = "Kanban Académico"
+		
+		# Generar contenido .ics
+		ics_content = "BEGIN:VCALENDAR\r\n"
+		ics_content += "VERSION:2.0\r\n"
+		ics_content += "PRODID:-//Kanban Académico//Calendar//ES\r\n"
+		ics_content += f"X-WR-CALNAME:{calendar_name}\r\n"
+		ics_content += "CALSCALE:GREGORIAN\r\n"
+		
+		for card in cards:
+			if not card.due_date:
+				continue
+			
+			# Crear evento para cada tarjeta
+			event_id = str(uuid.uuid4())
+			dtstart = datetime.combine(card.due_date, datetime.min.time())
+			dtend = dtstart + timedelta(hours=1)  # Evento de 1 hora
+			
+			# Formatear fechas en formato iCalendar (YYYYMMDDTHHMMSS)
+			dtstart_str = dtstart.strftime('%Y%m%dT%H%M%S')
+			dtend_str = dtend.strftime('%Y%m%dT%H%M%S')
+			dtstamp = datetime.now().strftime('%Y%m%dT%H%M%S')
+			
+			# Descripción con información de la tarjeta
+			description = f"Tablero: {card.list.board.name}\\n"
+			description += f"Lista: {card.list.title}\\n"
+			if card.description:
+				description += f"Descripción: {card.description}\\n"
+			if card.assignees.exists():
+				assignees = ", ".join([a.username for a in card.assignees.all()])
+				description += f"Responsables: {assignees}\\n"
+			description += f"Prioridad: {card.get_priority_display()}"
+			
+			# Ubicación (nombre del tablero)
+			location = card.list.board.name
+			
+			ics_content += "BEGIN:VEVENT\r\n"
+			ics_content += f"UID:{event_id}@kanban-academico\r\n"
+			ics_content += f"DTSTAMP:{dtstamp}\r\n"
+			ics_content += f"DTSTART:{dtstart_str}\r\n"
+			ics_content += f"DTEND:{dtend_str}\r\n"
+			ics_content += f"SUMMARY:{card.title}\r\n"
+			ics_content += f"DESCRIPTION:{description}\r\n"
+			ics_content += f"LOCATION:{location}\r\n"
+			
+			# Prioridad (1=Alta, 5=Media, 9=Baja)
+			priority_map = {'HIGH': '1', 'MED': '5', 'LOW': '9'}
+			ics_content += f"PRIORITY:{priority_map.get(card.priority, '5')}\r\n"
+			
+			ics_content += "END:VEVENT\r\n"
+		
+		ics_content += "END:VCALENDAR\r\n"
+		
+		# Crear respuesta HTTP con el archivo .ics
+		response = HttpResponse(ics_content, content_type='text/calendar; charset=utf-8')
+		filename = f"kanban-calendar-{board_id or 'all'}.ics"
+		response['Content-Disposition'] = f'attachment; filename="{filename}"'
+		return response

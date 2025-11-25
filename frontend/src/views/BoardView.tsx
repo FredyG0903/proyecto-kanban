@@ -67,6 +67,9 @@ export function BoardView() {
   const [draggedCard, setDraggedCard] = useState<Card | null>(null)
   const [dragOverList, setDragOverList] = useState<number | null>(null)
   const [isMovingCard, setIsMovingCard] = useState(false)
+  const [showActivityModal, setShowActivityModal] = useState(false)
+  const [activities, setActivities] = useState<any[]>([])
+  const [loadingActivities, setLoadingActivities] = useState(false)
 
   useEffect(() => {
     if (id) {
@@ -89,6 +92,57 @@ export function BoardView() {
       console.error('Error al cargar tablero:', error)
       navigate(user?.role === 'teacher' ? '/dashboard/teacher' : '/dashboard/student')
     }
+  }
+
+  const loadActivities = async () => {
+    if (!id) return
+    setLoadingActivities(true)
+    try {
+      const { data } = await api.get<any[]>(`boards/${id}/activity/`)
+      setActivities(data)
+    } catch (error) {
+      console.error('Error al cargar actividades:', error)
+    } finally {
+      setLoadingActivities(false)
+    }
+  }
+
+  const formatActivityAction = (action: string, meta: any) => {
+    switch (action) {
+      case 'board_created':
+        return `Creó el tablero "${meta.board_name || 'Tablero'}"`
+      case 'board_deleted':
+        return `Eliminó el tablero "${meta.board_name || 'Tablero'}"`
+      case 'list_created':
+        return `Creó la lista "${meta.list_title || 'Lista'}"`
+      case 'list_deleted':
+        return `Eliminó la lista "${meta.list_title || 'Lista'}"`
+      case 'card_created':
+        return `Creó la tarjeta "${meta.card_title || 'Tarjeta'}"`
+      case 'card_moved':
+        return `Movió la tarjeta "${meta.card_title || 'Tarjeta'}" de "${meta.from_list || 'Lista'}" a "${meta.to_list || 'Lista'}"`
+      case 'card_deleted':
+        return `Eliminó la tarjeta "${meta.card_title || 'Tarjeta'}"`
+      case 'member_added':
+        return `Agregó al miembro "${meta.username || 'Usuario'}"`
+      case 'member_removed':
+        return `Removió al miembro "${meta.username || 'Usuario'}"`
+      case 'comment_added':
+        return `Agregó un comentario en la tarjeta`
+      default:
+        return action.replace('_', ' ')
+    }
+  }
+
+  const formatDateTime = (dateString: string) => {
+    const date = new Date(dateString)
+    return date.toLocaleString('es-ES', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
   }
 
   const loadLists = async () => {
@@ -475,6 +529,25 @@ export function BoardView() {
         </div>
         <div className="flex items-center gap-4">
           <button
+            onClick={() => navigate('/calendar')}
+            className={`btn-secondary ${theme === 'dark' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-blue-500 hover:bg-blue-600'}`}
+            title="Ver calendario"
+          >
+            📅 Calendario
+          </button>
+          {isTeacherOwner && (
+            <button
+              onClick={() => {
+                setShowActivityModal(true)
+                loadActivities()
+              }}
+              className={`btn-secondary ${theme === 'dark' ? 'bg-purple-600 hover:bg-purple-700' : 'bg-purple-500 hover:bg-purple-600'}`}
+              title="Ver historial de actividad"
+            >
+              📊 Historial
+            </button>
+          )}
+          <button
             onClick={() => setShowSearchModal(true)}
             className="btn-success"
           >
@@ -856,6 +929,70 @@ export function BoardView() {
               <button
                 onClick={() => setShowSearchModal(false)}
                 className="btn-primary flex-1"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de historial de actividad */}
+      {showActivityModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => setShowActivityModal(false)}>
+          <div className={`bg-opacity-90 backdrop-blur-md rounded-lg w-full max-w-3xl max-h-[80vh] overflow-hidden ${
+            theme === 'dark' ? 'bg-gray-800' : 'bg-white'
+          }`} onClick={(e) => e.stopPropagation()}>
+            <div className={`p-6 border-b ${theme === 'dark' ? 'border-gray-700' : 'border-gray-300'}`}>
+              <h2 className={`text-2xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                📊 Historial de Actividad
+              </h2>
+              <p className={`text-sm mt-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                Actividad reciente del tablero "{board?.name}"
+              </p>
+            </div>
+            <div className="p-6 overflow-y-auto max-h-[60vh]">
+              {loadingActivities ? (
+                <div className={`text-center py-8 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                  Cargando actividades...
+                </div>
+              ) : activities.length === 0 ? (
+                <div className={`text-center py-8 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                  No hay actividades registradas aún
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {activities.map((activity) => (
+                    <div
+                      key={activity.id}
+                      className={`p-4 rounded-lg ${
+                        theme === 'dark' ? 'bg-gray-700' : 'bg-gray-100'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className={`font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                              {activity.actor.username}
+                            </span>
+                            <span className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                              {formatActivityAction(activity.action, activity.meta || {})}
+                            </span>
+                          </div>
+                          <div className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-500'}`}>
+                            {formatDateTime(activity.created_at)}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className={`p-6 border-t ${theme === 'dark' ? 'border-gray-700' : 'border-gray-300'}`}>
+              <button
+                onClick={() => setShowActivityModal(false)}
+                className="btn-secondary w-full"
               >
                 Cerrar
               </button>

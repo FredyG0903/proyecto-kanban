@@ -27,10 +27,10 @@ def generate_vapid_keys():
             format=serialization.PublicFormat.UncompressedPoint
         )
         
-        # Para VAPID, necesitamos solo los bytes X e Y (sin el prefijo 0x04)
-        # public_key_bytes[0] es 0x04, así que tomamos [1:33] para X y [33:65] para Y
-        # Pero VAPID usa solo los primeros 65 bytes sin el prefijo, así que tomamos [1:]
-        public_key_raw = public_key_bytes[1:]
+        # Para VAPID en el navegador, necesitamos el punto completo (65 bytes con prefijo 0x04)
+        # Para pywebpush en el backend, también necesitamos el punto completo
+        # NO eliminamos el prefijo 0x04, lo mantenemos
+        public_key_raw = public_key_bytes
         
         # Serializar clave privada
         private_key_bytes = private_key.private_bytes(

@@ -14,6 +14,8 @@ from api.views import (
 	ActivityLogView,
 	NotificationViewSet,
 	PushSubscriptionViewSet,
+	CalendarView,
+	CalendarExportView,
 )
 
 router = DefaultRouter()
@@ -33,6 +35,8 @@ urlpatterns = [
 	path("me/", MeView.as_view(), name="me"),
 	path("cards/search/", CardsSearchView.as_view(), name="cards_search"),
 	path("boards/<int:board_id>/activity/", ActivityLogView.as_view(), name="board_activity"),
+	path("calendar/", CalendarView.as_view(), name="calendar"),
+	path("calendar/export/", CalendarExportView.as_view(), name="calendar_export"),
 	path("", include(router.urls)),
 ]
 
